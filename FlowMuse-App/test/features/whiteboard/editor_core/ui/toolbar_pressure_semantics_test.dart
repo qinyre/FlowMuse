@@ -13,6 +13,10 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(
+          fontFamily: 'FlowMuseSans',
+          fontFamilyFallback: const ['sans-serif'],
+        ),
         home: Scaffold(
           body: Center(
             child: BrushPaletteButton(
@@ -48,6 +52,9 @@ void main() {
     await pumpPalette(tester);
     for (final label in ['铅笔', '圆珠笔', '钢笔', '毛笔', '荧光笔']) {
       expect(find.text(label), findsOneWidget);
+      final style = DefaultTextStyle.of(tester.element(find.text(label))).style;
+      expect(style.fontFamily, 'FlowMuseSans');
+      expect(style.fontFamilyFallback, contains('sans-serif'));
     }
     expect(
       find.byWidgetPredicate(

@@ -213,13 +213,15 @@ class _BrushPalette extends StatelessWidget {
                           children: [
                             Icon(_iconForBrush(brushType), size: 20),
                             const SizedBox(height: 4),
-                            ExcludeSemantics(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  _labelForBrush(brushType),
-                                  maxLines: 1,
-                                  style: const TextStyle(fontSize: 11),
+                            Flexible(
+                              child: ExcludeSemantics(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    _labelForBrush(brushType),
+                                    maxLines: 1,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
                                 ),
                               ),
                             ),
