@@ -58,11 +58,29 @@ class EditorState {
       SetSmartLayoutResult(:final document) => copyWith(
         scene: scene.withSmartLayout(document),
       ),
-      CompoundResult(:final results) => results.fold(
-        this,
-        (state, r) => state.applyResult(r),
-      ),
+      CompoundResult(:final results) => _applyCompound(results),
     };
+  }
+
+  EditorState _applyCompound(List<ToolResult> results) {
+    var state = this;
+    final updates = <Element>[];
+    void flush() {
+      if (updates.isEmpty) return;
+      state = state.copyWith(scene: state.scene.updateElements(updates));
+      updates.clear();
+    }
+
+    for (final result in results) {
+      if (result is UpdateElementResult) {
+        updates.add(result.element);
+      } else {
+        flush();
+        state = state.applyResult(result);
+      }
+    }
+    flush();
+    return state;
   }
 
   /// Creates a copy with the given fields replaced.
