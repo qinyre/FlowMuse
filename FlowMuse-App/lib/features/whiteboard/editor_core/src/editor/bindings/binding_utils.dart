@@ -252,16 +252,7 @@ class BindingUtils {
 
   /// Find all arrows in [scene] that are bound to [elementId].
   static List<ArrowElement> findBoundArrows(Scene scene, ElementId elementId) {
-    final result = <ArrowElement>[];
-    for (final e in scene.activeElements) {
-      if (e is ArrowElement) {
-        if (e.startBinding?.elementId == elementId.value ||
-            e.endBinding?.elementId == elementId.value) {
-          result.add(e);
-        }
-      }
-    }
-    return result;
+    return scene.findBoundArrows(elementId);
   }
 
   /// Whether [point] lies inside [element]'s bounding box, accounting for

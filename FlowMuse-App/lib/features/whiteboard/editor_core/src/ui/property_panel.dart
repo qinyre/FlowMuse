@@ -11,6 +11,7 @@ class PropertyPanel extends StatelessWidget {
   final MarkdrawController controller;
   final VoidCallback? onCollapse;
   final bool dockOnRight;
+  final bool expand;
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
@@ -22,6 +23,7 @@ class PropertyPanel extends StatelessWidget {
     required this.controller,
     this.onCollapse,
     this.dockOnRight = false,
+    this.expand = false,
     this.attributionActionResolver,
     this.selectionActions = const {},
   });
@@ -36,7 +38,7 @@ class PropertyPanel extends StatelessWidget {
     final isEditingText = controller.editingTextElementId != null;
     final activeTool = controller.editorState.activeToolType;
     final title = switch (elements.length) {
-      0 => activeTool == ToolType.freedraw ? '自由绘制' : null,
+      0 => activeTool == ToolType.freedraw ? '自由绘制' : '工具属性',
       1 => inkOnly ? '笔迹属性' : '选区属性',
       _ => inkOnly ? '笔迹属性' : '已选 ${elements.length} 项',
     };
@@ -104,44 +106,49 @@ class PropertyPanel extends StatelessWidget {
         constraints: BoxConstraints(minHeight: elements.isEmpty ? 360 : 480),
         decoration: BoxDecoration(
           color: cs.surface,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
           boxShadow: [
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 7),
+              color: cs.shadow.withValues(alpha: 0.1),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.all(AppSpacing.sidebarInset),
+          borderRadius: BorderRadius.circular(11),
+          child: Column(
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
             children: [
               if (onCollapse != null)
-                Row(
-                  children: [
-                    Expanded(
-                      child: title != null
-                          ? Text(
-                              title,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            )
-                          : const SizedBox.shrink(),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    border: Border(
+                      bottom: BorderSide(color: cs.outlineVariant),
                     ),
-                    SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: HoverTooltip(
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      HoverTooltip(
                         message: '收起属性面板',
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints.tightFor(
-                            width: 28,
-                            height: 28,
+                            width: 48,
+                            height: 48,
                           ),
                           iconSize: 20,
                           visualDensity: VisualDensity.compact,
@@ -153,23 +160,29 @@ class PropertyPanel extends StatelessWidget {
                           onPressed: onCollapse,
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(AppSpacing.sidebarInset),
+                  children: [
+                    PropertyPanelContent(
+                      controller: controller,
+                      comfortable: true,
+                      style: style,
+                      elements: elements,
+                      isLocked: isLocked,
+                      showFullTextProps: showFullTextProps,
+                      isEditingText: isEditingText,
+                      textOnly: textOnly,
+                      canvasSize: controller.canvasSize,
+                      attributionActionResolver: attributionActionResolver,
+                      selectionActions: selectionActions,
                     ),
                   ],
                 ),
-              if (onCollapse != null)
-                const Divider(height: AppSpacing.sectionGap),
-              PropertyPanelContent(
-                controller: controller,
-                comfortable: true,
-                style: style,
-                elements: elements,
-                isLocked: isLocked,
-                showFullTextProps: showFullTextProps,
-                isEditingText: isEditingText,
-                textOnly: textOnly,
-                canvasSize: controller.canvasSize,
-                attributionActionResolver: attributionActionResolver,
-                selectionActions: selectionActions,
               ),
             ],
           ),

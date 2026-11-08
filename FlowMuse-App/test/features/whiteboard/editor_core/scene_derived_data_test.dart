@@ -2,6 +2,158 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 void main() {
+  test('多选拖动保留最小画框归属与移出清理，画框缓存按场景隔离', () {
+    final outer = FrameElement(
+      id: ElementId('outer'),
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+    );
+    final inner = FrameElement(
+      id: ElementId('inner'),
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 300,
+    );
+    final a = RectangleElement(
+      id: ElementId('a'),
+      x: 40,
+      y: 40,
+      width: 20,
+      height: 20,
+    );
+    final b = a.copyWith(id: ElementId('b'), x: 70);
+    var state = EditorState(
+      scene: Scene().upsertRemoteElements([outer, inner, a, b]),
+      viewport: const ViewportState(),
+      selectedIds: {a.id, b.id},
+      activeToolType: ToolType.select,
+    );
+    ToolContext context() => ToolContext(
+      scene: state.scene,
+      viewport: state.viewport,
+      selectedIds: state.selectedIds,
+    );
+    void move(double dx, double dy) {
+      final current = state.scene.getElementById(a.id)!;
+      final point = Point(current.x + 10, current.y + 10);
+      final tool = SelectTool();
+      tool.onPointerDown(point, context());
+      state = state.applyResult(
+        tool.onPointerMove(point + Point(dx, dy), context()),
+      );
+      state = state.applyResult(
+        tool.onPointerUp(point + Point(dx, dy), context()),
+      );
+    }
+
+    move(120, 120);
+    expect(state.scene.getElementById(a.id)!.frameId, inner.id.value);
+    expect(state.scene.getElementById(b.id)!.frameId, inner.id.value);
+    final before = state.scene;
+    expect(before.findFrameChildren(inner.id).map((e) => e.id), [a.id, b.id]);
+    before.findFrameChildren(inner.id).clear();
+    expect(before.findFrameChildren(inner.id), hasLength(2));
+    move(400, 400);
+    expect(state.scene.getElementById(a.id)!.frameId, outer.id.value);
+    expect(state.scene.findFrameChildren(inner.id), isEmpty);
+    expect(before.findFrameChildren(inner.id), hasLength(2));
+    move(600, 600);
+    expect(state.scene.getElementById(a.id)!.frameId, isNull);
+    expect(state.scene.getElementById(b.id)!.frameId, isNull);
+    expect(before.softDeleteElement(inner.id).activeFrames.map((e) => e.id), [
+      outer.id,
+    ]);
+    expect(before.activeFrames.map((e) => e.id), [outer.id, inner.id]);
+    final remote = before.upsertRemoteElements([inner.copyWith(x: 900)]);
+    expect(remote.activeFrames.last.x, 900);
+    expect(before.activeFrames.last.x, 100);
+  });
+
+  test('批量更新与逐项操作保持顺序、版本及不存在 ID 的语义', () {
+    final a = RectangleElement(
+      id: ElementId('a'),
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+    );
+    final b = a.copyWith(id: ElementId('b'));
+    final initial = EditorState(
+      scene: Scene().upsertRemoteElements([a, b]),
+      viewport: const ViewportState(),
+      selectedIds: {},
+      activeToolType: ToolType.select,
+    );
+    final results = <ToolResult>[
+      UpdateElementResult(a.copyWith(x: 10)),
+      UpdateElementResult(a.copyWith(x: 20, version: 8)),
+      UpdateElementResult(a.copyWith(id: ElementId('missing'))),
+      RemoveElementResult(b.id),
+      UpdateElementResult(b.copyWith(y: 30)),
+      AddElementResult(a.copyWith(id: ElementId('c'))),
+      CompoundResult([
+        UpdateElementResult(a.copyWith(id: ElementId('c'), x: 40)),
+        UpdateElementResult(a.copyWith(x: 50)),
+      ]),
+      SetSelectionResult({a.id}),
+    ];
+    EditorState sequential(EditorState state, ToolResult result) =>
+        result is CompoundResult
+        ? result.results.fold(state, sequential)
+        : state.applyResult(result);
+    final expected = results.fold(initial, sequential);
+    final actual = initial.applyResult(CompoundResult(results));
+    expect(actual.selectedIds, expected.selectedIds);
+    expect(
+      actual.scene.elements.map((e) => e.id),
+      expected.scene.elements.map((e) => e.id),
+    );
+    for (final element in expected.scene.elements) {
+      final changed = actual.scene.getElementById(element.id)!;
+      expect(
+        (changed.x, changed.y, changed.version, changed.isDeleted),
+        (element.x, element.y, element.version, element.isDeleted),
+      );
+    }
+    expect(actual.scene.getElementById(ElementId('missing')), isNull);
+    expect(initial.scene.getElementById(a.id), same(a));
+  });
+
+  test('绑定索引保留去重、删除和远端修改语义，查询副本不污染快照', () {
+    final id = ElementId('target');
+    final arrow = ArrowElement(
+      id: ElementId('arrow'),
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      points: const [Point(0, 0), Point(20, 20)],
+      startBinding: PointBinding(
+        elementId: id.value,
+        fixedPoint: const Point(1, .5),
+      ),
+      endBinding: PointBinding(
+        elementId: id.value,
+        fixedPoint: const Point(0, .5),
+      ),
+    );
+    final scene = Scene().addElement(arrow);
+    expect(scene.findBoundArrows(id), [arrow]);
+    scene.findBoundArrows(id).clear();
+    expect(scene.findBoundArrows(id), [arrow]);
+    final deleted = scene.softDeleteElement(arrow.id);
+    expect(deleted.findBoundArrows(id), isEmpty);
+    expect(scene.getElementById(arrow.id), same(arrow));
+    final remote = deleted.upsertRemoteElements([
+      arrow.copyWithArrow(clearStartBinding: true, clearEndBinding: true),
+    ]);
+    expect(remote.findBoundArrows(id), isEmpty);
+    expect(scene.findBoundArrows(id), [arrow]);
+  });
+
   test('场景排序副本、重复绑定优先级与编辑/远端更新均保持原语义', () {
     final parent = RectangleElement(
       id: ElementId('parent'),

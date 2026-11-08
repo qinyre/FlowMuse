@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -6,6 +7,89 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('大导图根节点拖动携带全部标签与连线，保持一次撤销重做', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final elements = MindmapLayout.treeToElements(
+      MindmapNode(
+        text: 'root',
+        children: [
+          for (var i = 0; i < 160; i++) MindmapNode(text: 'branch $i'),
+        ],
+      ),
+    );
+    controller.loadScene(Scene().upsertRemoteElements(elements));
+    controller.canvasSize = const Size(900, 700);
+    final label = elements.whereType<TextElement>().firstWhere(
+      (e) => e.text == 'root',
+    );
+    final root = controller.currentScene.getElementById(
+      ElementId(label.containerId!),
+    )!;
+    controller.setViewport(
+      ViewportState(offset: Offset(root.x - 200, root.y - 200)),
+    );
+    final down = controller.editorState.viewport.sceneToScreen(
+      Offset(root.x + root.width / 2, root.y + root.height / 2),
+    );
+    controller.onPointerDown(
+      PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryMouseButton,
+        position: down,
+      ),
+    );
+    for (var i = 1; i <= 10; i++) {
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          kind: PointerDeviceKind.mouse,
+          buttons: kPrimaryMouseButton,
+          position: down + Offset(i * 5, i * 4),
+        ),
+      );
+    }
+    controller.onPointerUp(
+      PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.mouse,
+        position: down + const Offset(50, 40),
+      ),
+    );
+    void expectTranslation(double dx, double dy) {
+      for (final element in elements) {
+        final moved = controller.currentScene.getElementById(element.id)!;
+        expect(moved.x, closeTo(element.x + dx, .001));
+        expect(moved.y, closeTo(element.y + dy, .001));
+        expect(moved.isDeleted, isFalse);
+        if (element is ArrowElement) {
+          final edge = moved as ArrowElement;
+          expect(edge.startBinding?.elementId, element.startBinding?.elementId);
+          expect(edge.endBinding?.elementId, element.endBinding?.elementId);
+          expect(edge.points.length, element.points.length);
+          for (var i = 0; i < edge.points.length; i++) {
+            expect(
+              edge.x + edge.points[i].x,
+              closeTo(element.x + element.points[i].x + dx, .001),
+            );
+            expect(
+              edge.y + edge.points[i].y,
+              closeTo(element.y + element.points[i].y + dy, .001),
+            );
+          }
+        }
+      }
+    }
+
+    expectTranslation(50, 40);
+    controller.undo();
+    expectTranslation(0, 0);
+    expect(controller.historyManager.canUndo, isFalse);
+    controller.redo();
+    expectTranslation(50, 40);
+  });
 
   test('拖动分支会移动子树，曲线随节点跨边重新接到正确边缘', () {
     final controller = MarkdrawController();

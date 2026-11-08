@@ -31,6 +31,10 @@ class _PageOverviewState extends State<PageOverview> {
   final _failed = <String>{};
   final _dirtyPages = <String>{};
   final _changedElements = <ElementId, Element>{};
+  final _selectedPages = <String>{};
+  bool _selecting = false;
+  bool _confirming = false;
+  late bool _viewMode;
   bool _invalidateAll = false;
   Timer? _timer;
   bool _rendering = false;
@@ -54,6 +58,7 @@ class _PageOverviewState extends State<PageOverview> {
     _viewport = controller.editorState.viewport;
     _background = controller.canvasBackgroundColor;
     _grid = controller.gridSize;
+    _viewMode = controller.viewMode;
     _current = controller.pagedViewportMetrics?.currentPageIndex ?? 0;
     _scroll.addListener(_schedule);
     controller.addListener(_onControllerChanged);
@@ -87,25 +92,43 @@ class _PageOverviewState extends State<PageOverview> {
     }
     final viewport = controller.editorState.viewport;
     final layout = controller.layout;
+    final layoutChanged = !identical(layout, _layout);
+    final modeChanged = _viewMode != controller.viewMode;
     final appearanceChanged =
         _background != controller.canvasBackgroundColor ||
         _grid != controller.gridSize;
     if (viewport == _viewport &&
-        identical(layout, _layout) &&
-        !appearanceChanged) {
+        !layoutChanged &&
+        !appearanceChanged &&
+        !modeChanged) {
       return;
     }
-    if (viewport != _viewport) _generation++;
+    if (viewport != _viewport || layoutChanged) _generation++;
     _viewport = viewport;
     _layout = layout;
     _background = controller.canvasBackgroundColor;
     _grid = controller.gridSize;
+    _viewMode = controller.viewMode;
+    if (layoutChanged) {
+      final liveIds = layout.pages.map((page) => page.id).toSet();
+      _selectedPages.removeWhere((id) => !liveIds.contains(id));
+      _invalidate(_cache.keys.where((id) => !liveIds.contains(id)).toList());
+      _dirtyPages.retainAll(liveIds);
+      _failed.retainAll(liveIds);
+    }
+    if (_viewMode || layout.pages.length <= 1) {
+      _selecting = false;
+      _selectedPages.clear();
+    }
     final current = controller.pagedViewportMetrics?.currentPageIndex ?? 0;
     if (appearanceChanged) {
       _generation++;
       _invalidateAll = true;
     }
-    if (current != _current || appearanceChanged) {
+    if (current != _current ||
+        appearanceChanged ||
+        layoutChanged ||
+        modeChanged) {
       setState(() => _current = current);
     }
     _schedule();
@@ -275,6 +298,66 @@ class _PageOverviewState extends State<PageOverview> {
     _schedule();
   }
 
+  void _togglePage(String id) {
+    if (_confirming || controller.viewMode || _layout.pages.length <= 1) return;
+    setState(() {
+      _selecting = true;
+      if (!_selectedPages.add(id)) _selectedPages.remove(id);
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_confirming || _selectedPages.isEmpty) return;
+    final ids = Set<String>.of(_selectedPages);
+    setState(() => _confirming = true);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除 ${ids.length} 页？'),
+        content: const Text(
+          '所选页面及其中的笔迹、文字和 PDF 底稿将一并删除。\n\n'
+          '可通过撤销恢复，笔记至少保留一页。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || controller.isDisposed) return;
+    setState(() => _confirming = false);
+    if (confirmed != true) return;
+    final deleted = controller.deletePages(ids);
+    if (!mounted) return;
+    if (deleted) {
+      setState(() {
+        _selecting = false;
+        _selectedPages.clear();
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _revealCurrent();
+      });
+    }
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          deleted ? '已删除 ${ids.length} 页，可通过撤销恢复' : '页面已变化或正在编辑，请重新选择后重试',
+        ),
+      ),
+    );
+    controller.restoreKeyboardFocusWhenStable();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -295,6 +378,23 @@ class _PageOverviewState extends State<PageOverview> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
+                if (!controller.viewMode && _layout.pages.length > 1)
+                  HoverTooltip(
+                    message: _selecting ? '完成选择' : '选择页面',
+                    child: TextButton(
+                      onPressed: _confirming
+                          ? null
+                          : () => setState(() {
+                              _selecting = !_selecting;
+                              _selectedPages.clear();
+                            }),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      child: Text(_selecting ? '完成' : '选择'),
+                    ),
+                  ),
                 HoverTooltip(
                   message: '定位当前页',
                   child: IconButton(
@@ -312,15 +412,21 @@ class _PageOverviewState extends State<PageOverview> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: () async {
-              final navigated = await showPageJumpDialog(context, controller);
-              if (mounted && navigated) widget.onNavigate?.call();
-            },
-            child: Text(
-              '第 ${_current + 1} / ${_layout.pages.length} 页 · 输入页码跳转',
+          if (_selecting)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text('已选 ${_selectedPages.length} 页 · 点按勾选页面'),
+            )
+          else
+            TextButton(
+              onPressed: () async {
+                final navigated = await showPageJumpDialog(context, controller);
+                if (mounted && navigated) widget.onNavigate?.call();
+              },
+              child: Text(
+                '第 ${_current + 1} / ${_layout.pages.length} 页 · 输入页码跳转',
+              ),
             ),
-          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -344,19 +450,30 @@ class _PageOverviewState extends State<PageOverview> {
                     itemBuilder: (context, index) {
                       final page = _layout.pages[index];
                       final thumbnail = _cache[page.id];
-                      final selected = index == _current;
+                      final selected = _selecting
+                          ? _selectedPages.contains(page.id)
+                          : index == _current;
                       return Semantics(
                         label: '第 ${index + 1} 页',
                         selected: selected,
+                        checked: _selecting ? selected : null,
                         button: true,
                         child: InkWell(
                           key: ValueKey('page-preview-${page.id}'),
                           borderRadius: BorderRadius.circular(10),
                           onTap: () {
+                            if (_selecting) {
+                              _togglePage(page.id);
+                              return;
+                            }
                             if (controller.navigateToPage(page.id)) {
                               widget.onNavigate?.call();
                             }
                           },
+                          onLongPress:
+                              controller.viewMode || _layout.pages.length <= 1
+                              ? null
+                              : () => _togglePage(page.id),
                           child: Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Column(
@@ -376,61 +493,79 @@ class _PageOverviewState extends State<PageOverview> {
                                       ),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: Center(
-                                      child: AspectRatio(
-                                        aspectRatio:
-                                            page.bounds.width /
-                                            page.bounds.height,
-                                        child: thumbnail == null
-                                            ? ColoredBox(
-                                                color: colors
-                                                    .surfaceContainerHighest,
-                                                child: Center(
-                                                  child: Icon(
-                                                    _failed.contains(page.id)
-                                                        ? Icons
-                                                              .broken_image_outlined
-                                                        : Icons
-                                                              .description_outlined,
-                                                    color: colors.outline,
-                                                  ),
-                                                ),
-                                              )
-                                            : LayoutBuilder(
-                                                builder: (context, box) => ClipRect(
-                                                  child: Stack(
-                                                    fit: StackFit.expand,
-                                                    children: [
-                                                      RawImage(
-                                                        image: thumbnail.image,
-                                                        fit: BoxFit.fill,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Center(
+                                          child: AspectRatio(
+                                            aspectRatio:
+                                                page.bounds.width /
+                                                page.bounds.height,
+                                            child: thumbnail == null
+                                                ? ColoredBox(
+                                                    color: colors
+                                                        .surfaceContainerHighest,
+                                                    child: Center(
+                                                      child: Icon(
+                                                        _failed.contains(
+                                                              page.id,
+                                                            )
+                                                            ? Icons
+                                                                  .broken_image_outlined
+                                                            : Icons
+                                                                  .description_outlined,
+                                                        color: colors.outline,
                                                       ),
-                                                      for (final formula
-                                                          in thumbnail
-                                                              .mathElements)
-                                                        PositionedMathText(
-                                                          element: formula,
-                                                          viewport: ViewportState(
-                                                            offset: page
-                                                                .bounds
-                                                                .topLeft,
-                                                            zoom: math.min(
-                                                              box.maxWidth /
-                                                                  page
-                                                                      .bounds
-                                                                      .width,
-                                                              box.maxHeight /
-                                                                  page
-                                                                      .bounds
-                                                                      .height,
-                                                            ),
+                                                    ),
+                                                  )
+                                                : LayoutBuilder(
+                                                    builder: (context, box) => ClipRect(
+                                                      child: Stack(
+                                                        fit: StackFit.expand,
+                                                        children: [
+                                                          RawImage(
+                                                            image:
+                                                                thumbnail.image,
+                                                            fit: BoxFit.fill,
                                                           ),
-                                                        ),
-                                                    ],
+                                                          for (final formula
+                                                              in thumbnail
+                                                                  .mathElements)
+                                                            PositionedMathText(
+                                                              element: formula,
+                                                              viewport: ViewportState(
+                                                                offset: page
+                                                                    .bounds
+                                                                    .topLeft,
+                                                                zoom: math.min(
+                                                                  box.maxWidth /
+                                                                      page
+                                                                          .bounds
+                                                                          .width,
+                                                                  box.maxHeight /
+                                                                      page
+                                                                          .bounds
+                                                                          .height,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                        ],
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
-                                              ),
-                                      ),
+                                          ),
+                                        ),
+                                        if (_selecting)
+                                          Align(
+                                            alignment: Alignment.topRight,
+                                            child: Checkbox(
+                                              value: selected,
+                                              onChanged: _confirming
+                                                  ? null
+                                                  : (_) => _togglePage(page.id),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -455,6 +590,38 @@ class _PageOverviewState extends State<PageOverview> {
               },
             ),
           ),
+          if (_selecting)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.outlineVariant)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_selectedPages.length == _layout.pages.length)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Center(child: Text('至少保留一页')),
+                    ),
+                  FilledButton.icon(
+                    onPressed:
+                        _confirming ||
+                            _selectedPages.isEmpty ||
+                            _selectedPages.length >= _layout.pages.length
+                        ? null
+                        : _deleteSelected,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text('删除所选 ${_selectedPages.length} 页'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.error,
+                      foregroundColor: colors.onError,
+                      minimumSize: const Size(0, 44),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

@@ -2210,10 +2210,7 @@ class SelectTool implements Tool {
     Set<ElementId> selectedIds,
   ) {
     // Build a temporary scene with the moved elements applied
-    var tempScene = scene;
-    for (final elem in movedElements) {
-      tempScene = tempScene.updateElement(elem);
-    }
+    final tempScene = scene.updateElements(movedElements);
 
     // Collect all bound arrows, deduplicated
     final seen = <ElementId>{};
@@ -2251,10 +2248,7 @@ class SelectTool implements Tool {
     Set<ElementId> selectedIds,
   ) {
     // Build a temporary scene with the moved elements applied
-    var tempScene = scene;
-    for (final elem in movedElements) {
-      tempScene = tempScene.updateElement(elem);
-    }
+    final tempScene = scene.updateElements(movedElements);
 
     final results = <ToolResult>[];
     final seen = <ElementId>{};
