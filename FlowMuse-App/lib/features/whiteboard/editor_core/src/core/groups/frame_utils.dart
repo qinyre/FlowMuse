@@ -11,9 +11,7 @@ class FrameUtils {
   /// Returns all active elements in [scene] whose [frameId] matches
   /// [frameId]'s value.
   static List<Element> findFrameChildren(Scene scene, ElementId frameId) {
-    return scene.activeElements
-        .where((e) => e.frameId == frameId.value)
-        .toList();
+    return scene.findFrameChildren(frameId);
   }
 
   /// Returns true if [element]'s bounding box is fully within [frame]'s bounds.
@@ -45,8 +43,7 @@ class FrameUtils {
     FrameElement? best;
     double bestArea = double.infinity;
 
-    for (final e in scene.activeElements) {
-      if (e is! FrameElement) continue;
+    for (final e in scene.activeFrames) {
       if (e.id == element.id) continue;
       if (!isInsideFrame(element, e)) continue;
 

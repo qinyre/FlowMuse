@@ -111,6 +111,25 @@ class Scene {
   List<ArrowElement> findBoundArrows(ElementId id) =>
       List.of(_boundArrowsByTarget[id.value] ?? const []);
 
+  List<FrameElement> get activeFrames => _activeFrames;
+
+  late final List<FrameElement> _activeFrames = List.unmodifiable(
+    _elements.whereType<FrameElement>().where((element) => !element.isDeleted),
+  );
+
+  List<Element> findFrameChildren(ElementId id) =>
+      List.of(_childrenByFrame[id.value] ?? const []);
+
+  late final Map<String, List<Element>> _childrenByFrame = () {
+    final result = <String, List<Element>>{};
+    for (final element in _elements) {
+      if (!element.isDeleted && element.frameId != null) {
+        (result[element.frameId!] ??= []).add(element);
+      }
+    }
+    return result;
+  }();
+
   late final Map<String, List<ArrowElement>> _boundArrowsByTarget = () {
     final result = <String, List<ArrowElement>>{};
     for (final element in _elements) {
