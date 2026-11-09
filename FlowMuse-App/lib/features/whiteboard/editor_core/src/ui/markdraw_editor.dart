@@ -248,7 +248,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
   static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
-  static const _pageNavigationReservedExtent = 92.0;
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
@@ -906,27 +905,25 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         !_toolbarCollapsed;
     final propertyPanelOnRight = _toolbarDock == ToolbarDock.left;
     final safeArea = MediaQuery.paddingOf(context);
-    final chromeHeight = showTopToolbar ? 112.0 : 56.0;
+    final showPageNavigation = showChrome && _controller.isPagedViewport;
+    final markdownSplit = !isCompact && _controller.showMarkdownPanel;
+    final stackToolbar =
+        showPageNavigation && showTopToolbar && (isCompact || markdownSplit);
+    final showToolRail = showTopToolbar || showPageNavigation;
+    final chromeHeight =
+        56.0 + (showToolRail ? 56 : 0) + (stackToolbar ? 44 : 0);
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
-    final showPageNavigation = showChrome && _controller.isPagedViewport;
-    final inlinePageNavigation =
-        showPageNavigation && showTopToolbar && !isCompact;
-    final topToolbarOffset = safeArea.top + 60;
     final pageNavigation = showPageNavigation
-        ? _buildControlSurface(
-            PageNavigationControls(
-              controller: _controller,
-              onOverview: _togglePageOverview,
-              onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
-              enabled: widget.pageNavigationEnabled,
-            ),
+        ? PageNavigationControls(
+            controller: _controller,
+            onOverview: _togglePageOverview,
+            onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
+            enabled: widget.pageNavigationEnabled,
+            compact: width < 1100 || markdownSplit,
           )
         : null;
-    final rightChromeOffset =
-        (inlinePageNavigation ? topToolbarOffset : topChromeOffset) +
-        (showPageNavigation ? _pageNavigationReservedExtent : 0);
     final showDetachedControls =
         showChrome && (!_controller.viewMode || widget.config.showZoomControls);
     final controlGroupAtTop =
@@ -938,7 +935,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final propertyPanelSharesControls =
         showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
     final propertyPanelTop =
-        (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
+        topChromeOffset +
         (propertyPanelSharesControls && controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
@@ -959,11 +956,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
     final verticalToolbarTop =
         controlGroupSharesVerticalToolbar && controlGroupAtTop
-        ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset) +
-              _controlGroupReservedExtent
-        : showPageNavigation && _toolbarDock == ToolbarDock.right
-        ? rightChromeOffset
-        : safeArea.top + 56;
+        ? topChromeOffset + _controlGroupReservedExtent
+        : safeArea.top + chromeHeight;
     final verticalToolbarBottom =
         controlGroupSharesVerticalToolbar && !controlGroupAtTop
         ? bottomChromeOffset + _controlGroupReservedExtent
@@ -1160,6 +1154,50 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       ),
                     ),
                   ),
+                  if (showPageNavigation)
+                    DecoratedBox(
+                      key: const ValueKey('editor-tool-rail'),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLow,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: 56,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: showTopToolbar
+                                        ? Center(
+                                            child: _buildToolbar(
+                                              compact: isCompact,
+                                            ),
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
+                                  if (!stackToolbar && pageNavigation != null)
+                                    pageNavigation,
+                                ],
+                              ),
+                            ),
+                            if (stackToolbar)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: pageNavigation,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1228,29 +1266,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               ),
             ),
           ),
-        if (showNavigationTools && showTopToolbar)
+        if (showTopToolbar && !showPageNavigation)
           Positioned(
-            top: topToolbarOffset,
-            left: inlinePageNavigation ? safeArea.left + 12 : 8,
-            right: inlinePageNavigation ? safeArea.right + 12 : 8,
-            child: inlinePageNavigation
-                ? SizedBox(
-                    height: _pageNavigationReservedExtent,
-                    child: NavigationToolbar(
-                      middleSpacing: 12,
-                      middle: Align(
-                        alignment: Alignment.topCenter,
-                        widthFactor: 1,
-                        child: _buildToolbar(compact: isCompact),
-                      ),
-                      trailing: Align(
-                        alignment: Alignment.topRight,
-                        widthFactor: 1,
-                        child: pageNavigation,
-                      ),
-                    ),
-                  )
-                : Center(child: _buildToolbar(compact: isCompact)),
+            top: safeArea.top + 60,
+            left: 8,
+            right: 8,
+            child: Center(child: _buildToolbar(compact: isCompact)),
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
@@ -1267,17 +1288,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   : _buildToolbar(compact: isCompact),
             ),
           ),
-        if (pageNavigation != null && !inlinePageNavigation)
-          Positioned(
-            top: topChromeOffset,
-            right: safeArea.right + 12,
-            child: pageNavigation,
-          ),
         if (showDetachedControls)
           Positioned(
-            top: controlGroupAtTop
-                ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset)
-                : null,
+            top: controlGroupAtTop ? topChromeOffset : null,
             bottom: controlGroupAtTop ? null : bottomChromeOffset,
             left: controlGroupOnLeft
                 ? (overview != null && overviewOnLeft ? 304 : 12)
@@ -1321,7 +1334,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
         if (overview != null)
           Positioned(
-            top: overviewOnLeft ? topChromeOffset : rightChromeOffset,
+            top: topChromeOffset,
             bottom: bottomChromeOffset,
             left: overviewOnLeft ? 12 : null,
             right: overviewOnLeft ? null : 12,
@@ -1365,7 +1378,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
       ],
     );
-    if (!isCompact && _controller.showMarkdownPanel) {
+    if (markdownSplit) {
       body = MarkdrawSplitPane(controller: _controller, child: body);
     }
     return body;

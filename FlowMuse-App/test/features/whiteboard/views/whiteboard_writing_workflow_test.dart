@@ -193,11 +193,16 @@ void main() {
 
     tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(OutlinedButton, '选择来源'));
+    final source = find.byTooltip('选择来源');
+    final sourceOrigin = tester.getTopLeft(source);
+    await tester.tap(source);
     await tester.pumpAndSettle();
 
     final noteSource = find.text('整篇笔记（仅文字）').hitTestable();
     expect(noteSource, findsOneWidget);
+    final item = tester.getBottomLeft(noteSource);
+    expect(item.dy, lessThan(sourceOrigin.dy));
+    expect(item.dx, greaterThan(sourceOrigin.dx));
     await tester.tap(noteSource);
     await tester.pumpAndSettle();
     expect(find.byTooltip('移除笔记来源'), findsOneWidget);
@@ -252,7 +257,7 @@ void main() {
     final editor = find.byType(MarkdrawEditor);
     tester.widget<MarkdrawEditor>(editor).onAiPressed!();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     final citation = find.text('原文 1', findRichText: true);
     await tester.ensureVisible(citation);
@@ -349,7 +354,7 @@ void main() {
     final composer = find.byKey(const ValueKey('note-agent-composer'));
     await tester.enterText(composer, '整理为笔记');
     await tester.pump();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(find.text('整理稿预览'), findsOneWidget);
     expect(controller.layout.pages.single.id, original.id);
@@ -408,8 +413,10 @@ void main() {
     await tester.pump();
     tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
     await tester.pumpAndSettle();
+    expect(find.text('选区截图'), findsNothing);
+    await tester.tap(find.byTooltip('选择来源'));
+    await tester.pumpAndSettle();
     final screenshot = find.text('选区截图');
-    await tester.ensureVisible(screenshot);
     await tester.tap(screenshot);
     await tester.pump();
 

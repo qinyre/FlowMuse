@@ -100,7 +100,7 @@ void removeOverlayEntryAfterTeardown(
 ///
 /// 统一走 [AnchoredPanelRoute]：纸面容器 + 从锚点侧展开的方向性动画。
 /// 仍然渲染调用方传入的 [PopupMenuEntry]，菜单项语义与既有测试不变。
-enum AnchoredPopupPlacement { automatic, below, right, left }
+enum AnchoredPopupPlacement { automatic, below, above, right, left }
 
 Future<T?> showAnchoredPopupMenu<T extends Object>({
   required BuildContext context,
@@ -136,6 +136,12 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
       Offset.zero & overlay.size,
     ),
     AnchoredPopupPlacement.below => belowPosition,
+    AnchoredPopupPlacement.above => RelativeRect.fromLTRB(
+      anchorRect.left,
+      anchorRect.top - 4,
+      overlay.size.width - anchorRect.right,
+      overlay.size.height - anchorRect.top + 4,
+    ),
     AnchoredPopupPlacement.right => RelativeRect.fromLTRB(
       anchorRect.right + 4,
       anchorRect.bottom + 4,
@@ -152,6 +158,7 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
   final growth = switch (placement) {
     AnchoredPopupPlacement.automatic ||
     AnchoredPopupPlacement.below => AnchoredPanelGrowth.down,
+    AnchoredPopupPlacement.above => AnchoredPanelGrowth.up,
     AnchoredPopupPlacement.right => AnchoredPanelGrowth.right,
     AnchoredPopupPlacement.left => AnchoredPanelGrowth.left,
   };

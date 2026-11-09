@@ -1389,6 +1389,32 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   List<Widget> _shortcutWidgets(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final hasNoSource =
+        widget.sourceProvider != null &&
+        _context.noteTitle.isEmpty &&
+        _attachments.isEmpty;
+    final shortcuts = hasNoSource
+        ? const {
+            '课堂笔记模板': '给我一份可复用的课堂笔记模板，包含核心概念、例题和待复习问题。',
+            '复习计划模板': '给我一份可填写的复习计划模板，包含目标、复习安排和自测。',
+            '任务清单模板': '给我一份可复用的任务清单模板，按优先级整理，并留出截止日期。',
+          }
+        : _context.hasSelection
+        ? const {
+            '解释这里': '解释这里的内容',
+            '检查公式': '检查这里的公式是否正确，如有错误请指出',
+            '整理文字': '整理这里的文字内容',
+            '整理为笔记': '把这段内容整理为笔记，保留要点，看不清的地方标为待确认',
+            '整理成导图': '把这里的内容整理成思维导图',
+          }
+        : const {
+            '总结': '总结本次提供的内容',
+            '待办': '提取待办事项',
+            '大纲': '生成结构化大纲',
+            '整理为笔记': '把本次提供的内容整理为笔记，保留要点，看不清的地方标为待确认',
+            '思维导图': '根据当前内容生成思维导图',
+            '手写排版': '智能排版当前手写内容',
+          };
     return [
       Text(
         '快捷指令',
@@ -1402,28 +1428,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         spacing: 4,
         runSpacing: 4,
         children: [
-          for (final shortcut
-              in (widget.sourceProvider != null &&
-                          _context.noteTitle.isEmpty &&
-                          _attachments.isEmpty
-                      ? const <String, String>{}
-                      : _context.hasSelection
-                      ? const {
-                          '解释这里': '解释这里的内容',
-                          '检查公式': '检查这里的公式是否正确，如有错误请指出',
-                          '整理文字': '整理这里的文字内容',
-                          '整理为笔记': '把这段内容整理为笔记，保留要点，看不清的地方标为待确认',
-                          '整理成导图': '把这里的内容整理成思维导图',
-                        }
-                      : const {
-                          '总结': '总结本次提供的内容',
-                          '待办': '提取待办事项',
-                          '大纲': '生成结构化大纲',
-                          '整理为笔记': '把本次提供的内容整理为笔记，保留要点，看不清的地方标为待确认',
-                          '思维导图': '根据当前内容生成思维导图',
-                          '手写排版': '智能排版当前手写内容',
-                        })
-                  .entries)
+          for (final shortcut in shortcuts.entries)
             ActionChip(
               label: Text(shortcut.key),
               visualDensity: VisualDensity.compact,
@@ -1463,13 +1468,16 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     double height,
   ) {
     final shortcutsOpen = _showShortcuts ?? _messages.isEmpty;
-    final captureInFooter =
-        widget.sourceProvider != null && widget.onRegionCapture != null;
+    final hasSource =
+        widget.sourceProvider != null && _context.noteTitle.isNotEmpty;
+    final busy = _loading || _applying || _capturing;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        border: Border(top: BorderSide(color: colors.outlineVariant)),
+        color: colors.surfaceContainerLowest,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1483,117 +1491,51 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.sourceProvider != null) ...[
-                    Wrap(
-                      spacing: AppSpacing.controlGap,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Builder(
-                          builder: (anchor) => OutlinedButton.icon(
-                            onPressed: _loading || _applying || _capturing
-                                ? null
-                                : () async {
-                                    final scope =
-                                        await showAnchoredPopupMenu<
-                                          AiAgentScope
-                                        >(
-                                          context: anchor,
-                                          placement:
-                                              AnchoredPopupPlacement.below,
-                                          items: [
-                                            for (final (scope, icon, label)
-                                                in const [
-                                                  (
-                                                    AiAgentScope.selection,
-                                                    Icons.crop_free,
-                                                    '当前选区',
-                                                  ),
-                                                  (
-                                                    AiAgentScope.page,
-                                                    Icons.description_outlined,
-                                                    '当前页',
-                                                  ),
-                                                  (
-                                                    AiAgentScope.note,
-                                                    Icons.notes_outlined,
-                                                    '整篇笔记（仅文字）',
-                                                  ),
-                                                ])
-                                              PopupMenuItem(
-                                                value: scope,
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      icon,
-                                                      size: 18,
-                                                      color: colors
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                    const SizedBox(
-                                                      width:
-                                                          AppSpacing.controlGap,
-                                                    ),
-                                                    Flexible(
-                                                      child: Text(label),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        );
-                                    if (mounted && scope != null) {
-                                      _selectSource(scope);
-                                    }
-                                  },
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('选择来源'),
-                          ),
-                        ),
-                        InputChip(
-                          label: Text(_context.label),
-                          deleteButtonTooltipMessage: '移除笔记来源',
-                          onDeleted:
-                              _loading ||
-                                  _applying ||
-                                  _capturing ||
-                                  _context.noteTitle.isEmpty
-                              ? null
-                              : () => _selectSource(AiAgentScope.none),
-                        ),
-                      ],
+                  if (hasSource)
+                    InputChip(
+                      label: Text(
+                        _context.label,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      deleteButtonTooltipMessage: '移除笔记来源',
+                      onDeleted: busy
+                          ? null
+                          : () => _selectSource(AiAgentScope.none),
+                      visualDensity: VisualDensity.compact,
                     ),
-                    const SizedBox(height: AppSpacing.controlGap),
-                  ],
                   if (_hasAttachmentSources) ...[
-                    const SizedBox(height: AppSpacing.controlGap),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        if (!captureInFooter &&
-                            (widget.onCaptureSelection != null ||
-                                widget.onRegionCapture != null))
-                          _selectionCaptureButton(),
-                        if (widget.onCaptureCurrentPdfPage != null)
-                          ActionChip(
-                            avatar: const Icon(Icons.picture_as_pdf, size: 18),
-                            label: const Text('PDF 页'),
-                            visualDensity: VisualDensity.compact,
-                            onPressed:
-                                _loading ||
-                                    _applying ||
-                                    _capturing ||
-                                    _attachments.length >=
-                                        maxAiVisualAttachments
-                                ? null
-                                : () => unawaited(
-                                    _captureAndApply(
-                                      capture: widget.onCaptureCurrentPdfPage!,
-                                      scene: _AiCaptureScene.manual,
+                    if (widget.sourceProvider == null)
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          if (widget.onCaptureSelection != null ||
+                              widget.onRegionCapture != null)
+                            _selectionCaptureButton(),
+                          if (widget.onCaptureCurrentPdfPage != null)
+                            ActionChip(
+                              avatar: const Icon(
+                                Icons.picture_as_pdf,
+                                size: 18,
+                              ),
+                              label: const Text('PDF 页'),
+                              visualDensity: VisualDensity.compact,
+                              onPressed:
+                                  _loading ||
+                                      _applying ||
+                                      _capturing ||
+                                      _attachments.length >=
+                                          maxAiVisualAttachments
+                                  ? null
+                                  : () => unawaited(
+                                      _captureAndApply(
+                                        capture:
+                                            widget.onCaptureCurrentPdfPage!,
+                                        scene: _AiCaptureScene.manual,
+                                      ),
                                     ),
-                                  ),
-                          ),
-                      ],
-                    ),
+                            ),
+                        ],
+                      ),
                     if (_attachments.isNotEmpty || _capturing) ...[
                       const SizedBox(height: AppSpacing.controlGap),
                       SizedBox(
@@ -1715,26 +1657,31 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.controlGap),
-                    Text(
-                      widget.sourceProvider != null
-                          ? '文字和图片将随请求发送至你配置的模型服务。'
-                                '框选截图包含框内可见内容，发送前请核对。'
-                          : _attachments.isEmpty
-                          ? '本次提问仅发送文字上下文'
-                          : '选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；'
-                                '框选截图包含框内全部可见内容；'
-                                'PDF 页附件为导入时的整页原始位图（不含白板批注）。'
-                                '仅发送附件条中显示的 ${_attachments.length} 张图片'
-                                '（其中选区截图会随打开面板或点击视觉指令自动加入或更新），'
-                                '不会自动上传附件之外的画布图像内容'
-                                '（文字上下文仍按既有规则随请求发送）；'
-                                '追问时附件将随每次请求重新发送，直到移除或清除对话。'
-                                '发送前请确认。',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+                    if (widget.sourceProvider == null ||
+                        hasSource ||
+                        _attachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                        child: Text(
+                          widget.sourceProvider != null
+                              ? _attachments.isEmpty
+                                    ? '所选文字将随消息发送至模型服务。'
+                                    : '截图包含框内可见内容，将随消息发送至模型服务，请先核对。'
+                              : _attachments.isEmpty
+                              ? '本次提问仅发送文字上下文'
+                              : '选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；'
+                                    '框选截图包含框内全部可见内容；'
+                                    'PDF 页附件为导入时的整页原始位图（不含白板批注）。'
+                                    '仅发送附件条中显示的 ${_attachments.length} 张图片'
+                                    '（其中选区截图会随打开面板或点击视觉指令自动加入或更新），'
+                                    '不会自动上传附件之外的画布图像内容'
+                                    '（文字上下文仍按既有规则随请求发送）；'
+                                    '追问时附件将随每次请求重新发送，直到移除或清除对话。'
+                                    '发送前请确认。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
                       ),
-                    ),
                   ],
                   if (widget.sourceProvider == null)
                     Text(
@@ -1778,81 +1725,161 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               minLines: 1,
               maxLines: 3,
               decoration: InputDecoration(
-                labelText: response == null ? '希望 AI 完成什么？' : '继续修改，例如：再精简一点',
+                hintText: response == null ? '输入你的问题或任务' : '继续提问，或调整上一次结果',
+                contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
                 isDense: true,
                 counterText: '',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: colors.surfaceContainerLowest,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
                 helperText: _speechState == SpeechRecognitionState.idle
                     ? null
                     : (_speechPreview.isEmpty ? '正在聆听…' : _speechPreview),
-                suffixIcon: _speechAvailable
-                    ? IconButton(
-                        tooltip: _speechState == SpeechRecognitionState.idle
-                            ? '语音输入'
-                            : '结束语音输入',
-                        onPressed: _loading || _applying ? null : _toggleSpeech,
-                        icon: Icon(
-                          _speechState == SpeechRecognitionState.idle
-                              ? Icons.mic_none
-                              : Icons.stop_circle_outlined,
-                        ),
-                      )
-                    : null,
               ),
             ),
           ),
 
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            alignment: WrapAlignment.spaceBetween,
+          Row(
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: shortcutsOpen ? '收起快捷指令' : '展开快捷指令',
-                    onPressed: () {
-                      setState(() => _showShortcuts = !shortcutsOpen);
-                      if (!shortcutsOpen) _revealInConversation(_shortcutsKey);
-                    },
-                    icon: const Icon(Icons.bolt_outlined),
-                  ),
-                  IconButton(
-                    tooltip: '保存为常用指令',
-                    onPressed: _loading || _applying || instruction.isEmpty
+              if (widget.sourceProvider != null)
+                Builder(
+                  builder: (anchor) => IconButton(
+                    tooltip: '选择来源',
+                    onPressed: busy
                         ? null
-                        : _savePrompt,
-                    icon: const Icon(Icons.bookmark_add_outlined),
+                        : () => _showComposerMenu(anchor, instruction),
+                    icon: const Icon(Icons.add, size: 20),
                   ),
-                  if (captureInFooter) _selectionCaptureButton(),
-                ],
+                ),
+              IconButton(
+                tooltip: shortcutsOpen ? '收起快捷指令' : '展开快捷指令',
+                isSelected: shortcutsOpen,
+                onPressed: () {
+                  setState(() => _showShortcuts = !shortcutsOpen);
+                  if (!shortcutsOpen) _revealInConversation(_shortcutsKey);
+                },
+                icon: const Icon(Icons.bolt_outlined, size: 20),
+                selectedIcon: const Icon(Icons.bolt, size: 20),
               ),
-              if (_loading)
-                FilledButton.tonal(
-                  onPressed: _cancelGeneration,
-                  child: const Text('取消生成'),
-                )
-              else
-                FilledButton.icon(
-                  onPressed:
-                      _applying ||
+              if (widget.sourceProvider == null)
+                IconButton(
+                  tooltip: '保存为常用指令',
+                  onPressed: _loading || _applying || instruction.isEmpty
+                      ? null
+                      : _savePrompt,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 20),
+                ),
+              const Spacer(),
+              if (_speechAvailable)
+                IconButton(
+                  tooltip: _speechState == SpeechRecognitionState.idle
+                      ? '语音输入'
+                      : '结束语音输入',
+                  onPressed: _loading || _applying ? null : _toggleSpeech,
+                  icon: Icon(
+                    _speechState == SpeechRecognitionState.idle
+                        ? Icons.mic_none
+                        : Icons.stop_circle_outlined,
+                    size: 20,
+                  ),
+                ),
+              IconButton.filled(
+                tooltip: _loading
+                    ? '取消生成'
+                    : response == null
+                    ? '发送'
+                    : '追问修改',
+                onPressed: _loading
+                    ? _cancelGeneration
+                    : _applying ||
                           instruction.isEmpty ||
                           _speechState != SpeechRecognitionState.idle
-                      ? null
-                      : _generate,
-                  icon: const Icon(Icons.arrow_upward, size: 16),
-                  label: Text(response == null ? '发送' : '追问修改'),
+                    ? null
+                    : _generate,
+                icon: Icon(
+                  _loading ? Icons.stop_rounded : Icons.arrow_upward_rounded,
+                  size: 19,
                 ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
+
+  Future<void> _showComposerMenu(
+    BuildContext anchor,
+    String instruction,
+  ) async {
+    final action = await showAnchoredPopupMenu<VoidCallback>(
+      context: anchor,
+      placement: AnchoredPopupPlacement.above,
+      items: [
+        for (final (scope, icon, label) in const [
+          (AiAgentScope.selection, Icons.crop_free, '当前选区'),
+          (AiAgentScope.page, Icons.description_outlined, '当前页'),
+          (AiAgentScope.note, Icons.notes_outlined, '整篇笔记（仅文字）'),
+        ])
+          _composerMenuItem(label, icon, () => _selectSource(scope)),
+        if (widget.onRegionCapture != null || widget.onCaptureSelection != null)
+          _composerMenuItem(
+            '选区截图',
+            Icons.add_a_photo_outlined,
+            _attachments.length >= maxAiVisualAttachments
+                ? null
+                : _captureSelection,
+          ),
+        if (widget.onCaptureCurrentPdfPage case final capture?)
+          _composerMenuItem(
+            'PDF 页',
+            Icons.picture_as_pdf_outlined,
+            _attachments.length >= maxAiVisualAttachments
+                ? null
+                : () => unawaited(
+                    _captureAndApply(
+                      capture: capture,
+                      scene: _AiCaptureScene.manual,
+                    ),
+                  ),
+          ),
+        const PopupMenuDivider(),
+        _composerMenuItem(
+          '保存为常用指令',
+          Icons.bookmark_add_outlined,
+          instruction.isEmpty ? null : () => unawaited(_savePrompt()),
+        ),
+      ],
+    );
+    if (mounted && !_loading && !_applying && !_capturing) action?.call();
+  }
+
+  PopupMenuItem<VoidCallback> _composerMenuItem(
+    String label,
+    IconData icon,
+    VoidCallback? action,
+  ) => PopupMenuItem(
+    value: action,
+    enabled: action != null,
+    child: Row(
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: AppSpacing.controlGap),
+        Flexible(child: Text(label)),
+      ],
+    ),
+  );
+
+  void _captureSelection() => unawaited(
+    widget.onRegionCapture != null
+        ? _addRegionAttachment()
+        : _captureAndApply(
+            capture: widget.onCaptureSelection!,
+            scene: _AiCaptureScene.manual,
+          ),
+  );
 
   Widget _selectionCaptureButton() => ActionChip(
     avatar: const Icon(Icons.crop_free, size: 18),
@@ -1864,13 +1891,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
             _capturing ||
             _attachments.length >= maxAiVisualAttachments
         ? null
-        : () => unawaited(
-            widget.onRegionCapture != null
-                ? _addRegionAttachment()
-                : _captureAndApply(
-                    capture: widget.onCaptureSelection!,
-                    scene: _AiCaptureScene.manual,
-                  ),
-          ),
+        : _captureSelection,
   );
 }

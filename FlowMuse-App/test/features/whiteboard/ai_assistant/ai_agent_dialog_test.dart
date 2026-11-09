@@ -81,7 +81,7 @@ void main() {
     expect(tester.getTopLeft(find.text('工具属性')).dy, titleTop);
 
     await tester.enterText(composer, '保留正在编辑的指令');
-    await tester.tap(find.text('选择来源'));
+    await tester.tap(find.byTooltip('选择来源'));
     await tester.pumpAndSettle();
     expect(find.textContaining('整篇笔记'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -118,7 +118,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.getRect(assistant).bottom, lessThanOrEqualTo(350));
-    expect(tester.getRect(find.text('发送')).bottom, lessThanOrEqualTo(350));
+    expect(tester.getRect(find.byTooltip('发送')).bottom, lessThanOrEqualTo(350));
     tester.view.resetViewInsets();
     await tester.binding.setSurfaceSize(const Size(375, 700));
     await tester.pumpAndSettle();
@@ -182,7 +182,7 @@ void main() {
     await tester.tap(find.text('待办'));
     expect(tester.widget<TextField>(composer).controller!.text, '提取待办事项');
 
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     final renameAction = find.widgetWithText(CheckboxListTile, '重命名笔记');
     await tester.ensureVisible(renameAction);
@@ -207,11 +207,11 @@ void main() {
     );
 
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     await tester.enterText(composer, '再精简一点');
     await tester.pump();
-    await tester.tap(find.text('追问修改'));
+    await tester.tap(find.byTooltip('追问修改'));
     await tester.pumpAndSettle();
 
     expect(repository.conversations.last, hasLength(1));
@@ -219,7 +219,7 @@ void main() {
     await tester.enterText(composer, '改成三条待办');
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.text('追问修改'));
+    await tester.tap(find.byTooltip('追问修改'));
     await tester.pumpAndSettle();
     expect(repository.conversations.last, hasLength(2));
     final insertField = find.byWidgetPredicate(
@@ -251,7 +251,7 @@ void main() {
       onApply: (_) async {},
     );
 
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(find.byType(MarkdownBody), findsOneWidget);
 
@@ -260,14 +260,14 @@ void main() {
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
     expect(find.text('笔记 Agent'), findsOneWidget);
-    expect(find.text('追问修改'), findsOneWidget);
+    expect(find.byTooltip('追问修改'), findsOneWidget);
   });
 
   testWidgets('清除对话会清空当前回复和后续请求历史', (tester) async {
     final repository = _FakeAiAgentRepository();
     await _openDialog(tester, repository: repository, onApply: (_) async {});
 
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('清除对话'), findsOneWidget);
 
@@ -277,7 +277,7 @@ void main() {
     expect(find.byTooltip('清除对话'), findsNothing);
 
     await tester.enterText(composer, '重新开始');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(repository.conversations.last, isEmpty);
   });
@@ -288,9 +288,9 @@ void main() {
     await _openDialog(tester, repository: repository, onApply: (_) async {});
 
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pump();
-    await tester.tap(find.text('取消生成'));
+    await tester.tap(find.byTooltip('取消生成'));
     await tester.pump();
 
     expect(repository.cancelToken!.isCancelled, isTrue);
@@ -312,13 +312,80 @@ void main() {
 
     await tester.enterText(composer, '帮我构思一个故事');
     await tester.pump();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     expect(find.text('这是直接回答'), findsOneWidget);
     expect(find.text('确认后将执行：'), findsNothing);
     expect(find.text('确认应用'), findsNothing);
-    expect(find.text('追问修改'), findsOneWidget);
+    expect(find.byTooltip('追问修改'), findsOneWidget);
+  });
+
+  testWidgets('没有来源时展开通用指令，选取笔记来源后切换为内容指令', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '',
+            texts: const [],
+            contextTruncated: false,
+            contextLabel: '未添加笔记来源',
+            sourceProvider: (scope) => (
+              context: (
+                noteTitle: scope == AiAgentScope.none ? '' : '讲义',
+                texts: scope == AiAgentScope.none
+                    ? const <AiNoteText>[]
+                    : const [AiNoteText(id: 'topic', text: '复习内容')],
+                truncated: false,
+                label: scope == AiAgentScope.none ? '未添加笔记来源' : '整篇笔记',
+                hasSelection: false,
+              ),
+              capture: null,
+              location: null,
+            ),
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    final template = find.text('课堂笔记模板');
+    await tester.tap(find.byTooltip('收起快捷指令'));
+    await tester.pumpAndSettle();
+    expect(template, findsNothing);
+    await tester.tap(find.byTooltip('展开快捷指令'));
+    await tester.pumpAndSettle();
+    await tester.tap(template);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(composer).controller!.text,
+      contains('课堂笔记模板'),
+    );
+    expect(repository.receivedTexts, isEmpty);
+
+    await tester.tap(find.byTooltip('选择来源'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存为常用指令'));
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(
+        InputChip,
+        '给我一份可复用的课堂笔记模板，包含核心概念、例题和待复习问题。',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('选择来源'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('整篇笔记（仅文字）'));
+    await tester.pumpAndSettle();
+    expect(find.text('总结'), findsOneWidget);
+    expect(template, findsNothing);
+    await tester.tap(find.byTooltip('移除笔记来源'));
+    await tester.pumpAndSettle();
+    expect(template, findsOneWidget);
   });
 
   testWidgets('右侧面板不会用遮罩阻断画布操作', (tester) async {
@@ -392,7 +459,7 @@ void main() {
       label: '当前选区（1 个文本框）',
       hasSelection: false,
     );
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     expect(repository.receivedTexts.single.single.id, 'text-b');
@@ -434,8 +501,8 @@ void main() {
     );
     await tester.tap(find.byTooltip('移除笔记来源'));
     await tester.pumpAndSettle();
-    expect(find.text('未添加笔记来源'), findsOneWidget);
-    await tester.tap(find.text('发送'));
+    expect(find.byTooltip('移除笔记来源'), findsNothing);
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     expect(repository.receivedTexts.single, isEmpty);
   });
@@ -457,7 +524,7 @@ void main() {
       ),
       onApply: (response) async => applied = response,
     );
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     final edit = find.text('编辑草稿');
     await tester.ensureVisible(edit);
@@ -527,7 +594,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     final onLink = tester
@@ -592,15 +659,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('选择来源'));
+    await tester.tap(find.byTooltip('选择来源'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('当前页'));
     await tester.pumpAndSettle();
     await tester.enterText(composer, '第二条问题');
     await tester.pump();
-    await tester.tap(find.text('追问修改'));
+    await tester.tap(find.byTooltip('追问修改'));
     await tester.pumpAndSettle();
 
     expect(repository.conversations.last, isEmpty);
@@ -641,7 +708,7 @@ void main() {
     );
 
     await tester.tap(find.text('思维导图'));
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     expect(find.text('生成思维导图'), findsOneWidget);
@@ -675,7 +742,7 @@ void main() {
     );
 
     await tester.enterText(composer, '生成思维导图');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('确认应用'));
     await tester.pumpAndSettle();
@@ -700,7 +767,7 @@ void main() {
     expect(find.textContaining('会随打开面板或点击视觉指令自动加入或更新'), findsOneWidget);
 
     await tester.enterText(composer, '解释这里');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     expect(repository.receivedAttachments.last, hasLength(1));
@@ -736,7 +803,7 @@ void main() {
     );
 
     await tester.enterText(composer, '解释这里');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pump();
     expect(find.text('正在结合选区图像与笔记内容生成…'), findsOneWidget);
 
@@ -768,7 +835,7 @@ void main() {
     // 点击快捷指令触发刷新捕获（第 2 次，挂起），随后立即发送。
     await tester.tap(find.text('解释这里'));
     await tester.pump();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pump();
 
     refreshCapture.complete(attachmentOf('刷新后截图'));
@@ -801,7 +868,7 @@ void main() {
     // 点击快捷指令触发刷新捕获（指令由 chip 填入），随后立即发送。
     await tester.tap(find.text('解释这里'));
     await tester.pump();
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pump();
 
     refreshCapture.completeError(StateError('图片解码失败，请重新打开笔记后重试'));
@@ -1085,7 +1152,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pump();
 
     expect(
@@ -1118,11 +1185,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     await tester.enterText(composer, '再精简一点');
     await tester.pump();
-    await tester.tap(find.text('追问修改'));
+    await tester.tap(find.byTooltip('追问修改'));
     await tester.pumpAndSettle();
 
     expect(repository.receivedAttachments, hasLength(2));
@@ -1140,7 +1207,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('清除对话'));
     await tester.pumpAndSettle();
@@ -1269,11 +1336,11 @@ void main() {
 
     // When: 发送一次，再追问一次。
     await tester.enterText(composer, '总结当前笔记');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
     await tester.enterText(composer, '再精简一点');
     await tester.pump();
-    await tester.tap(find.text('追问修改'));
+    await tester.tap(find.byTooltip('追问修改'));
     await tester.pumpAndSettle();
 
     // Then: 每次请求都携带该框选截图附件。
@@ -1298,7 +1365,7 @@ void main() {
     );
 
     await tester.enterText(composer, '生成待办');
-    await tester.tap(find.text('发送'));
+    await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
 
     // Then 只显示回复，不出现确认区块与"确认应用"

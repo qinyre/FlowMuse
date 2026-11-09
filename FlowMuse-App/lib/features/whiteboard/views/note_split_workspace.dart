@@ -434,6 +434,7 @@ class _ReferenceNotePaneState extends State<_ReferenceNotePane> {
                       if (_controller.layout.pages.isNotEmpty)
                         PageNavigationControls(
                           controller: _controller,
+                          compact: true,
                           onOverview: () => setState(() {
                             _controller.closeFind();
                             _showOverview = !_showOverview;
