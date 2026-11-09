@@ -20,7 +20,8 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('平板双侧面板对齐，缩窄和键盘不遮挡操作，隐藏后保留输入', (tester) async {
+  final composer = find.byKey(const ValueKey('note-agent-composer'));
+  testWidgets('宽屏停靠可调宽，窄屏和键盘可操作，收起后保留输入', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     addTearDown(tester.view.resetViewInsets);
@@ -47,11 +48,8 @@ void main() {
             return Scaffold(
               body: MarkdrawEditor(
                 controller: controller,
-                assistantPanel: Visibility(
-                  visible: visible,
-                  maintainState: true,
-                  child: panel,
-                ),
+                assistantPanel: panel,
+                assistantPanelVisible: visible,
               ),
             );
           },
@@ -61,16 +59,19 @@ void main() {
     await tester.pumpAndSettle();
     final properties = find.byType(PropertyPanel);
     final assistant = find.byKey(const ValueKey('editor-assistant-panel'));
-    void expectAligned() {
-      final left = tester.getRect(properties);
-      final right = tester.getRect(assistant);
-      expect(left.top, closeTo(right.top, 1));
-      expect(left.bottom, closeTo(right.bottom, 1));
-      expect(left.overlaps(right), isFalse);
-    }
-
-    expectAligned();
+    expect(
+      tester.getRect(properties).overlaps(tester.getRect(assistant)),
+      isFalse,
+    );
     expect(tester.getSize(assistant).width, 360);
+    expect(controller.canvasSize.width, 840);
+    await tester.drag(
+      find.byKey(const ValueKey('editor-assistant-divider')),
+      const Offset(-40, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(assistant).width, greaterThan(360));
+    expect(controller.canvasSize.width + tester.getSize(assistant).width, 1200);
     final titleTop = tester.getTopLeft(find.text('工具属性')).dy;
     await tester.drag(
       find.descendant(of: properties, matching: find.byType(ListView)),
@@ -79,14 +80,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('工具属性')).dy, titleTop);
 
-    await tester.enterText(find.byType(TextField).first, '保留正在编辑的指令');
+    await tester.enterText(composer, '保留正在编辑的指令');
     await tester.tap(find.text('选择来源'));
     await tester.pumpAndSettle();
     expect(find.textContaining('整篇笔记'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     update(() => visible = false);
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(composer, findsNothing);
+    expect(controller.canvasSize.width, 1200);
     update(() => visible = true);
     await tester.pumpAndSettle();
     expect(find.text('保留正在编辑的指令'), findsOneWidget);
@@ -96,10 +99,9 @@ void main() {
         .onDockChanged
         ?.call(ToolbarDock.left);
     await tester.pumpAndSettle();
-    expectAligned();
     expect(
       tester.getRect(assistant).left,
-      lessThan(tester.getRect(properties).left),
+      greaterThan(tester.getRect(properties).left),
     );
     expect(
       tester
@@ -110,7 +112,7 @@ void main() {
 
     await tester.binding.setSurfaceSize(const Size(900, 700));
     await tester.pumpAndSettle();
-    expectAligned();
+    expect(tester.getSize(assistant).width, 900);
     tester.view.viewInsets = FakeViewPadding(
       bottom: 350 * tester.view.devicePixelRatio,
     );
@@ -121,8 +123,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(375, 700));
     await tester.pumpAndSettle();
     expect(properties, findsNothing);
-    expect(tester.getRect(assistant).left, greaterThanOrEqualTo(12));
-    expect(tester.getRect(assistant).right, lessThanOrEqualTo(363));
+    expect(tester.getRect(assistant).left, 0);
+    expect(tester.getRect(assistant).right, 375);
     expect(find.text('保留正在编辑的指令'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -166,10 +168,7 @@ void main() {
     speech.emit(const SpeechRecognitionResult('重复结果', isFinal: true));
     await tester.pump();
 
-    expect(
-      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-      '生成一份总结',
-    );
+    expect(tester.widget<TextField>(composer).controller!.text, '生成一份总结');
   });
 
   testWidgets('快捷指令可填充输入且只应用勾选动作', (tester) async {
@@ -181,10 +180,7 @@ void main() {
     );
 
     await tester.tap(find.text('待办'));
-    expect(
-      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-      '提取待办事项',
-    );
+    expect(tester.widget<TextField>(composer).controller!.text, '提取待办事项');
 
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
@@ -192,6 +188,8 @@ void main() {
     await tester.ensureVisible(renameAction);
     await tester.tap(renameAction);
     await tester.pump();
+    await tester.ensureVisible(find.text('确认应用'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
 
@@ -208,16 +206,18 @@ void main() {
       onApply: (response) async => applied = response,
     );
 
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '再精简一点');
+    await tester.enterText(composer, '再精简一点');
+    await tester.pump();
     await tester.tap(find.text('追问修改'));
     await tester.pumpAndSettle();
 
     expect(repository.conversations.last, hasLength(1));
     expect(repository.conversations.last.single.response.actions, hasLength(2));
-    await tester.enterText(find.byType(TextField).first, '改成三条待办');
+    await tester.enterText(composer, '改成三条待办');
+    await tester.pump();
     await tester.pump();
     await tester.tap(find.text('追问修改'));
     await tester.pumpAndSettle();
@@ -226,6 +226,8 @@ void main() {
       (widget) => widget is TextField && widget.controller?.text == '精简后的总结',
     );
     await tester.enterText(insertField, '用户修改后的总结');
+    await tester.ensureVisible(find.text('确认应用'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
 
@@ -253,9 +255,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MarkdownBody), findsOneWidget);
 
+    await tester.ensureVisible(find.text('确认应用'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
-    expect(find.text('AI 笔记助手'), findsOneWidget);
+    expect(find.text('笔记 Agent'), findsOneWidget);
     expect(find.text('追问修改'), findsOneWidget);
   });
 
@@ -272,7 +276,7 @@ void main() {
     expect(find.text('准备应用'), findsNothing);
     expect(find.byTooltip('清除对话'), findsNothing);
 
-    await tester.enterText(find.byType(TextField).first, '重新开始');
+    await tester.enterText(composer, '重新开始');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     expect(repository.conversations.last, isEmpty);
@@ -283,7 +287,7 @@ void main() {
     final repository = _FakeAiAgentRepository(completer: completer);
     await _openDialog(tester, repository: repository, onApply: (_) async {});
 
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pump();
     await tester.tap(find.text('取消生成'));
@@ -306,7 +310,7 @@ void main() {
       onApply: (_) async {},
     );
 
-    await tester.enterText(find.byType(TextField).first, '帮我构思一个故事');
+    await tester.enterText(composer, '帮我构思一个故事');
     await tester.pump();
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
@@ -465,9 +469,15 @@ void main() {
 
     await tester.tap(edit);
     await tester.pumpAndSettle();
-    final editor = find.byType(TextField).last;
+    final editor = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.controller?.text == '# 讲义笔记\n## 结论\n- 定义已核对',
+    );
     await tester.ensureVisible(editor);
     await tester.enterText(editor, '# 修订笔记\n## 结论\n- 条件仍待确认');
+    await tester.ensureVisible(find.text('确认写入整理稿'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认写入整理稿'));
     await tester.pumpAndSettle();
     expect(applied?.actions.single.value, '# 修订笔记\n## 结论\n- 条件仍待确认');
@@ -541,6 +551,74 @@ void main() {
     expect(find.widgetWithText(ActionChip, '第 2 页'), findsOneWidget);
   });
 
+  testWidgets('切换来源保留旧消息及其独立引用，旧上下文不随新请求发送', (tester) async {
+    final repository = _FakeAiAgentRepository(
+      response: const AiAgentResponse(
+        message: '[查看原文](flowmuse-source:text-1)',
+        actions: [],
+      ),
+    );
+    final cited = <AiSourceLocation>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '示例',
+            texts: const [AiNoteText(id: 'old-element', text: '旧来源')],
+            contextTruncated: false,
+            contextLabel: '第 1 页',
+            initialInstruction: '第一条问题',
+            sourceProvider: (_) => (
+              context: (
+                noteTitle: '示例',
+                texts: const [AiNoteText(id: 'new-element', text: '新来源')],
+                truncated: false,
+                label: '第 2 页',
+                hasSelection: false,
+              ),
+              capture: null,
+              location: null,
+            ),
+            onViewSource: (location) {
+              cited.add(location);
+              return null;
+            },
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('选择来源'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('当前页'));
+    await tester.pumpAndSettle();
+    await tester.enterText(composer, '第二条问题');
+    await tester.pump();
+    await tester.tap(find.text('追问修改'));
+    await tester.pumpAndSettle();
+
+    expect(repository.conversations.last, isEmpty);
+    expect(repository.receivedTexts.last.single.id, 'new-element');
+    expect(find.text('第一条问题'), findsOneWidget);
+    expect(find.text('第二条问题'), findsOneWidget);
+    final replies = tester.widgetList<MarkdownBody>(find.byType(MarkdownBody));
+    expect(replies, hasLength(2));
+    for (final reply in replies) {
+      reply.onTapLink!('查看原文', 'flowmuse-source:text-1', '');
+    }
+    await tester.pump();
+    expect(cited.cast<AiElementSource>().map((source) => source.ids.single), [
+      'old-element',
+      'new-element',
+    ]);
+  });
+
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
     final action = AiAgentAction.fromJson({
       'tool': 'generate_mindmap',
@@ -568,6 +646,8 @@ void main() {
 
     expect(find.text('生成思维导图'), findsOneWidget);
     expect(find.textContaining('中心主题'), findsOneWidget);
+    await tester.ensureVisible(find.text('确认应用'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
     expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
@@ -594,8 +674,10 @@ void main() {
       },
     );
 
-    await tester.enterText(find.byType(TextField).first, '生成思维导图');
+    await tester.enterText(composer, '生成思维导图');
     await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('确认应用'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
@@ -617,7 +699,7 @@ void main() {
     expect(find.textContaining('仅发送附件条中显示的 1 张图片'), findsOneWidget);
     expect(find.textContaining('会随打开面板或点击视觉指令自动加入或更新'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.enterText(composer, '解释这里');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 
@@ -640,10 +722,7 @@ void main() {
     expect(find.text('总结'), findsNothing);
 
     await tester.tap(find.text('解释这里'));
-    expect(
-      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-      '解释这里的内容',
-    );
+    expect(tester.widget<TextField>(composer).controller!.text, '解释这里的内容');
   });
 
   testWidgets('附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
@@ -656,7 +735,7 @@ void main() {
       onApply: (_) async {},
     );
 
-    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.enterText(composer, '解释这里');
     await tester.tap(find.text('发送'));
     await tester.pump();
     expect(find.text('正在结合选区图像与笔记内容生成…'), findsOneWidget);
@@ -1005,7 +1084,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pump();
 
@@ -1038,10 +1117,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '再精简一点');
+    await tester.enterText(composer, '再精简一点');
+    await tester.pump();
     await tester.tap(find.text('追问修改'));
     await tester.pumpAndSettle();
 
@@ -1059,7 +1139,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('清除对话'));
@@ -1069,8 +1149,7 @@ void main() {
     expect(find.text('本次提问仅发送文字上下文'), findsOneWidget);
   });
 
-  testWidgets('未传框选截图回调时选区截图芯片仍走元素捕获路径（零回归锚点）',
-      (tester) async {
+  testWidgets('未传框选截图回调时选区截图芯片仍走元素捕获路径（零回归锚点）', (tester) async {
     // Given: 仅传 onCaptureSelection 的既有调用方，未传 onRegionCapture。
     var selectionCalls = 0;
     await _openDialog(
@@ -1140,8 +1219,7 @@ void main() {
     await _openPanel(
       tester,
       repository: _FakeAiAgentRepository(),
-      onRegionCapture: () async =>
-          throw StateError('请先在画布选中要发送的内容'),
+      onRegionCapture: () async => throw StateError('请先在画布选中要发送的内容'),
       onApply: (_) async {},
     );
 
@@ -1190,20 +1268,18 @@ void main() {
     await tester.pumpAndSettle();
 
     // When: 发送一次，再追问一次。
-    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.enterText(composer, '总结当前笔记');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '再精简一点');
+    await tester.enterText(composer, '再精简一点');
+    await tester.pump();
     await tester.tap(find.text('追问修改'));
     await tester.pumpAndSettle();
 
     // Then: 每次请求都携带该框选截图附件。
     expect(repository.receivedAttachments, hasLength(2));
     expect(repository.receivedAttachments.last, hasLength(1));
-    expect(
-      repository.receivedAttachments.last.single.sourceLabel,
-      '框选截图',
-    );
+    expect(repository.receivedAttachments.last.single.sourceLabel, '框选截图');
   });
 
   testWidgets('说明性动作被净化后不进入确认区（仅回复）', (tester) async {
@@ -1214,17 +1290,14 @@ void main() {
         response: const AiAgentResponse(
           message: '当前并没有可生成代办的内容',
           actions: [
-            AiAgentAction(
-              tool: AiAgentTool.insertText,
-              value: '当前并没有可生成代办的内容',
-            ),
+            AiAgentAction(tool: AiAgentTool.insertText, value: '当前并没有可生成代办的内容'),
           ],
         ),
       ),
       onApply: (_) async {},
     );
 
-    await tester.enterText(find.byType(TextField).first, '生成待办');
+    await tester.enterText(composer, '生成待办');
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 
@@ -1235,9 +1308,13 @@ void main() {
   });
 
   testWidgets('点击指令输入框主动请求焦点以唤起键盘', (tester) async {
-    await _openDialog(tester, repository: _FakeAiAgentRepository(), onApply: (_) async {});
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onApply: (_) async {},
+    );
 
-    final inputField = find.byType(TextField).first;
+    final inputField = composer;
     await tester.tap(inputField);
     await tester.pump();
 

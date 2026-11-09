@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -121,6 +122,22 @@ void main() {
 
     await openReference();
     expect(referenceController().viewMode, isTrue);
+    final referenceCanvas = find.byWidgetPredicate(
+      (widget) => widget is EditorCanvas && widget.controller != controller,
+    );
+    final referenceRect = tester.getRect(referenceCanvas);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('笔记 Agent'), findsOneWidget);
+    expect(tester.getRect(referenceCanvas), referenceRect);
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('editor-assistant-panel')))
+          .overlaps(referenceRect),
+      isFalse,
+    );
+    await tester.tap(find.byTooltip('收起笔记 Agent'));
+    await tester.pumpAndSettle();
     final mainX = tester.getCenter(editor).dx;
     await tester.tap(find.byTooltip('参考笔记选项'));
     await tester.pumpAndSettle();
@@ -244,7 +261,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('返回 AI 回复'), findsOneWidget);
-    expect(citation, findsNothing);
+    expect(citation, findsOneWidget);
     expect(
       tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder,
       isNotNull,
@@ -258,6 +275,108 @@ void main() {
     await tester.pumpAndSettle();
     expect(citation, findsOneWidget);
     expect(tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder, isNull);
+  });
+
+  testWidgets('笔记 Agent 确认后追加多页整理稿，一次撤销且保留原稿和会话', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: '多页整理测试', noteType: NoteType.paged),
+    ))!;
+    final draft = [
+      '# 讲义整理',
+      '## 核心概念',
+      ...List.generate(70, (index) => '- 推导步骤 ${index + 1}'),
+    ].join('\n');
+    final container = _container(
+      library: library,
+      assistant: AiAgentRepository(
+        config: const AiAgentConfig(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'test-model',
+        ),
+        post:
+            ({
+              required url,
+              headers = const {},
+              required body,
+              connectTimeoutMs = 8000,
+              readTimeoutMs = 130000,
+              cancelToken,
+            }) async => NativeHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'choices': [
+                  {
+                    'message': {
+                      'content': '整理稿已生成',
+                      'tool_calls': [
+                        {
+                          'type': 'function',
+                          'function': {
+                            'name': 'draft_note',
+                            'arguments': jsonEncode({'text': draft}),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            ),
+      ),
+    );
+    final controller = await _open(tester, container, note);
+    final original = controller.layout.pages.single;
+    const originalText = '保留这份原稿';
+    controller.loadScene(
+      controller.currentScene.addElement(
+        TextElement(
+          id: const ElementId('original-draft-source'),
+          x: original.bounds.left + 80,
+          y: original.bounds.top + 80,
+          width: 200,
+          height: 40,
+          text: originalText,
+          fontFamily: 'Excalifont',
+          customData: CanvasLayout.elementCustomData(original.id),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    final composer = find.byKey(const ValueKey('note-agent-composer'));
+    await tester.enterText(composer, '整理为笔记');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(find.text('整理稿预览'), findsOneWidget);
+    expect(controller.layout.pages.single.id, original.id);
+
+    final apply = find.text('确认写入整理稿');
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.length, greaterThan(2));
+    expect(controller.layout.pages.first.id, original.id);
+    expect(find.text('已写入笔记'), findsOneWidget);
+    expect(find.text('整理稿已生成'), findsOneWidget);
+    controller.undo();
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.single.id, original.id);
+    expect(
+      controller.currentScene.activeElements
+          .whereType<TextElement>()
+          .single
+          .text,
+      originalText,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await _drainIo(tester, container);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
   });
 
   testWidgets('AI 框选与偏移缩放后的画布对齐，预览保留上下两端', (tester) async {

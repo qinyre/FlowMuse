@@ -92,6 +92,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
     this.assistantPanel,
+    this.assistantPanelVisible = true,
+    this.assistantSourceAction,
     this.selectionActions = const {},
     this.onAskCurrentPage,
     this.canvasOverlayBuilder,
@@ -188,6 +190,8 @@ class MarkdrawEditor extends StatefulWidget {
 
   final VoidCallback? onAiPressed;
   final Widget? assistantPanel;
+  final bool assistantPanelVisible;
+  final Widget? assistantSourceAction;
   final Map<String, VoidCallback> selectionActions;
   final VoidCallback? onAskCurrentPage;
   final Widget Function(ViewportState viewport)? canvasOverlayBuilder;
@@ -253,6 +257,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomRight;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
+  double _assistantWidth = 360;
   String _propertyPanelContext = '';
   late final SpeechRecognitionService _speechService;
   StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
@@ -494,7 +499,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     });
   }
 
-  Size _getCanvasSize() => context.size ?? const Size(800, 600);
+  Size _getCanvasSize() => _controller.canvasSize.isEmpty
+      ? context.size ?? const Size(800, 600)
+      : _controller.canvasSize;
 
   void _noop() {}
 
@@ -770,11 +777,26 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           backgroundColor: parseColor(_controller.canvasBackgroundColor),
           body: LayoutBuilder(
             builder: (context, constraints) {
+              final hasAssistant = widget.assistantPanel != null;
+              final canDock = constraints.maxWidth >= 1000;
+              final showingAssistant =
+                  hasAssistant &&
+                  widget.assistantPanelVisible &&
+                  (canDock || widget.assistantSourceAction == null);
+              final dockWidth = _assistantWidth
+                  .clamp(
+                    320.0,
+                    max(320.0, min(520.0, constraints.maxWidth - 640)),
+                  )
+                  .toDouble();
+              final docked = showingAssistant && canDock;
+              final canvasWidth =
+                  constraints.maxWidth - (docked ? dockWidth : 0);
               final isCompact =
-                  constraints.maxWidth < 720 ||
-                  constraints.maxWidth < widget.config.compactBreakpoint;
+                  canvasWidth < 720 ||
+                  canvasWidth < widget.config.compactBreakpoint;
               _controller.lastCanvasSize = Size(
-                constraints.maxWidth,
+                canvasWidth,
                 constraints.maxHeight,
               );
               if (isCompact != _controller.isCompact) {
@@ -784,10 +806,80 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   }
                 });
               }
-              return _buildBody(
-                isCompact: isCompact,
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
+              final colors = Theme.of(context).colorScheme;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    right: docked ? dockWidth : 0,
+                    child: _buildBody(
+                      isCompact: isCompact,
+                      width: canvasWidth,
+                      height: constraints.maxHeight,
+                    ),
+                  ),
+                  if (hasAssistant)
+                    Positioned(
+                      key: const ValueKey('editor-assistant-panel'),
+                      top: 0,
+                      bottom: 0,
+                      right: 0,
+                      width: canDock ? dockWidth : constraints.maxWidth,
+                      child: Visibility(
+                        visible: showingAssistant,
+                        maintainState: true,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            border: Border(
+                              left: BorderSide(color: colors.outlineVariant),
+                            ),
+                          ),
+                          child: SafeArea(
+                            top: false,
+                            child: Column(
+                              children: [
+                                Expanded(child: widget.assistantPanel!),
+                                if (docked)
+                                  if (widget.assistantSourceAction
+                                      case final action?)
+                                    Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: action,
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (docked)
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: dockWidth - 4,
+                      width: 8,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: GestureDetector(
+                          key: const ValueKey('editor-assistant-divider'),
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragUpdate: (event) => setState(() {
+                            _assistantWidth = (dockWidth - event.delta.dx)
+                                .clamp(
+                                  320.0,
+                                  min(520.0, constraints.maxWidth - 640),
+                                );
+                          }),
+                        ),
+                      ),
+                    ),
+                  if (!canDock && widget.assistantSourceAction != null)
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: widget.assistantSourceAction!,
+                    ),
+                ],
               );
             },
           ),
@@ -845,54 +937,22 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         _controlGroupPosition == ControlGroupPosition.bottomLeft;
     final propertyPanelSharesControls =
         showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
-    var propertyPanelTop =
+    final propertyPanelTop =
         (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
         (propertyPanelSharesControls && controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
-    var propertyPanelBottom =
+    final propertyPanelBottom =
         bottomChromeOffset +
         (propertyPanelSharesControls && !controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
-    final hasAssistant = widget.assistantPanel != null;
-    final assistantToolbarInset =
-        showNavigationTools && _toolbarDock != ToolbarDock.top ? 52.0 : 0.0;
     final showProperties =
         showEditChrome &&
         overview == null &&
         !isCompact &&
         widget.config.showPropertyPanel &&
         (_controller.selectedElements.isNotEmpty || _controller.isCreationTool);
-    final assistantSharesControls =
-        showDetachedControls && propertyPanelOnRight == controlGroupOnLeft;
-    final assistantTopInset =
-        (propertyPanelOnRight ? topChromeOffset : rightChromeOffset) +
-        (assistantSharesControls && controlGroupAtTop
-            ? _controlGroupReservedExtent
-            : 0);
-    final assistantBottomInset =
-        bottomChromeOffset +
-        (assistantSharesControls && !controlGroupAtTop
-            ? _controlGroupReservedExtent
-            : 0);
-    // Keep the input and footer reachable when the keyboard reduces the editor.
-    final assistantTop = min(
-      showProperties && !_propertyPanelCollapsed
-          ? max(propertyPanelTop, assistantTopInset)
-          : assistantTopInset,
-      max(safeArea.top + 12, height - 252),
-    );
-    final assistantBottom = min(
-      showProperties && !_propertyPanelCollapsed
-          ? max(propertyPanelBottom, assistantBottomInset)
-          : assistantBottomInset,
-      max(bottomChromeOffset, height - assistantTop - 240),
-    );
-    if (hasAssistant && !_propertyPanelCollapsed) {
-      propertyPanelTop = assistantTop;
-      propertyPanelBottom = assistantBottom;
-    }
     final controlGroupSharesVerticalToolbar =
         showNavigationTools &&
         _toolbarDock != ToolbarDock.top &&
@@ -1251,7 +1311,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     )
                   : PropertyPanel(
                       controller: _controller,
-                      expand: hasAssistant,
                       onCollapse: _collapsePropertyPanel,
                       dockOnRight: propertyPanelOnRight,
                       selectionActions: widget.selectionActions,
@@ -1303,26 +1362,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 onFinish: _speechService.stop,
               ),
             ),
-          ),
-        if (hasAssistant)
-          Positioned(
-            key: const ValueKey('editor-assistant-panel'),
-            top: assistantTop,
-            bottom: assistantBottom,
-            left: propertyPanelOnRight
-                ? safeArea.left + 12 + assistantToolbarInset
-                : null,
-            right: propertyPanelOnRight
-                ? null
-                : safeArea.right + 12 + assistantToolbarInset,
-            width: min(
-              width >= 1400 ? 420.0 : 360.0,
-              max(
-                0.0,
-                width - safeArea.horizontal - 24 - assistantToolbarInset,
-              ),
-            ),
-            child: widget.assistantPanel!,
           ),
       ],
     );

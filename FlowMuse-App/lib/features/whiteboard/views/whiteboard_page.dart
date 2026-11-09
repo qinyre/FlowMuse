@@ -168,6 +168,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
   AiAgentPanel? _aiPanel;
+  bool _aiPanelExpanded = false;
   bool _aiCaptureModeActive = false;
   AiSourceLocation? _viewedAiSource;
 
@@ -940,7 +941,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return;
     }
     if (_aiPanel != null) {
-      _closeAiPanel();
+      if (_aiPanelExpanded) {
+        _collapseAiPanel();
+      } else {
+        setState(() {
+          _aiPanelExpanded = true;
+          _aiSpeechInputActive = true;
+        });
+        unawaited(_speechRecognitionService.cancel());
+      }
       return;
     }
     final hasSelection = _markdrawController.selectedElements.any(
@@ -962,7 +971,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     final initialContext = source.context;
     final panel = AiAgentPanel(
-      key: UniqueKey(),
+      key: _aiPanel?.key ?? UniqueKey(),
       repository: ref.read(aiAgentRepositoryProvider),
       noteTitle: initialContext.noteTitle,
       texts: initialContext.texts,
@@ -979,64 +988,25 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       speechRecognitionService: _speechRecognitionService,
       onApply: _applyAiAgentResponse,
       onViewSource: _viewAiSource,
-      onClose: _closeAiPanel,
+      onClose: _collapseAiPanel,
     );
     setState(() {
       _aiPanel = panel;
+      _aiPanelExpanded = true;
       _viewedAiSource = null;
       _aiSpeechInputActive = true;
     });
     unawaited(_speechRecognitionService.cancel());
   }
 
-  Widget? _buildAiPanel() {
-    final panel = _aiPanel;
-    if (panel == null) return null;
-    final colors = Theme.of(context).colorScheme;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Visibility(
-            visible: !_aiCaptureModeActive && _viewedAiSource == null,
-            maintainState: true,
-            maintainAnimation: true,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: colors.outlineVariant.withValues(alpha: 0.7),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.shadow.withValues(alpha: 0.1),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(1),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(11),
-                  child: panel,
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (_viewedAiSource != null)
-          Positioned(
-            right: 0,
-            top: 0,
-            child: FilledButton.tonalIcon(
-              onPressed: _returnToAiReply,
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('返回 AI 回复'),
-            ),
-          ),
-      ],
-    );
+  void _collapseAiPanel() {
+    if (_aiCaptureModeActive) _handleRegionCancel();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _aiPanelExpanded = false;
+      _viewedAiSource = null;
+    });
+    unawaited(_finishAiSpeechInput());
   }
 
   void _returnToAiReply() => setState(() => _viewedAiSource = null);
@@ -1101,6 +1071,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (_aiCaptureModeActive) _handleRegionCancel();
     setState(() {
       _aiPanel = null;
+      _aiPanelExpanded = false;
       _viewedAiSource = null;
     });
     unawaited(_finishAiSpeechInput());
@@ -1150,7 +1121,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _finishAiSpeechInput() async {
     await _speechRecognitionService.cancel();
-    if (mounted && _aiPanel == null) {
+    if (mounted && !_aiPanelExpanded) {
       setState(() => _aiSpeechInputActive = false);
     }
   }
@@ -1195,7 +1166,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       :final value,
     )) {
       _markdrawController.insertNoteDraft(parseNoteDraft(value));
-      _closeAiPanel();
       return;
     }
     if (response.actions.any(
@@ -2897,8 +2867,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             _returnToAiReply();
             return;
           }
-          if (_aiPanel != null) {
-            _closeAiPanel();
+          if (_aiPanelExpanded) {
+            _collapseAiPanel();
             return;
           }
           if (_referenceNote != null) {
@@ -2926,7 +2896,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onClose: () => setState(() => _referenceNote = null),
                   child: MarkdrawEditor(
                     controller: _markdrawController,
-                    assistantPanel: _buildAiPanel(),
+                    assistantPanel: _aiPanel,
+                    assistantPanelVisible:
+                        _aiPanelExpanded &&
+                        !_aiCaptureModeActive &&
+                        !_smartLayoutV3PanelVisible,
+                    assistantSourceAction: _viewedAiSource == null
+                        ? null
+                        : FilledButton.tonalIcon(
+                            onPressed: _returnToAiReply,
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('返回 AI 回复'),
+                          ),
                     collaborationFocusLabel: focusStatus?.label,
                     collaborationFocusDescription: focusStatus?.description,
                     onExitCollaborationFocus: _exitFocus,
