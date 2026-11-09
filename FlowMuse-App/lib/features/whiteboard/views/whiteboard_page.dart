@@ -1202,7 +1202,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       tool: AiAgentTool.draftNote,
       :final value,
     )) {
-      _markdrawController.insertNoteDraft(parseNoteDraft(value));
+      _markdrawController.insertNoteDraft([
+        ...parseNoteDraft(value),
+        if (response.webSources.isNotEmpty) ...[
+          (role: NoteDraftRole.section, text: '网页参考资料'),
+          for (final source in response.webSources)
+            (
+              role: NoteDraftRole.bullet,
+              text: '${source.title}\n${source.url}',
+            ),
+        ],
+      ]);
       return;
     }
     if (response.actions.any(

@@ -185,6 +185,10 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 
 2026-09-23 已按用户要求在生产启用两个开关，Web/API 已部署。发布版本、备份与检查结果见 [上线记录](../docs/研发记录/research/2026-09-23-social-deployment.md)；跨端与鸿蒙验收范围见 [阶段验证记录](../docs/研发记录/research/2026-09-23-social-validation.md)。
 
+## AI 笔记助手查资料
+
+在后端 `.env` 设置 `FLOWMUSE_BRAVE_SEARCH_API_KEY`，用 `docker compose up -d --no-deps --build collab-server` 更新容器。留空时查资料返回 503，普通助手对话继续可用。搜索需要已验证的 FlowMuse 账号，当前单进程限制每秒 1 次、每个 UTC 日共 200 次、每账号每日 20 次。进程重启会重置本地计数，服务商额度仍独立生效。配置后使用无敏感信息的关键词实测检索、引用和写回。
+
 ## 源码授权与发行通知
 
 有权许可的原创部分采用仓库根的 [PolyForm Noncommercial 1.0.0](../LICENSE)，允许其规定的非商业使用、修改和再分发，超出范围的商业使用需另行授权；不附加统一参赛限制。第三方依赖、已有授权及普通工具使用补充许可见[第三方声明](../THIRD_PARTY_NOTICES.md)。

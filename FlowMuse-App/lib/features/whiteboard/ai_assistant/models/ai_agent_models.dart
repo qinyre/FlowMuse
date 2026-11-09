@@ -364,12 +364,19 @@ String _normalizeInsertText(String source) {
   return result;
 }
 
+typedef AiWebSource = ({String title, Uri url, String snippet});
+
 @immutable
 class AiAgentResponse {
-  const AiAgentResponse({required this.message, required this.actions});
+  const AiAgentResponse({
+    required this.message,
+    required this.actions,
+    this.webSources = const [],
+  });
 
   final String message;
   final List<AiAgentAction> actions;
+  final List<AiWebSource> webSources;
 
   Map<String, Object?> toJson() => {
     'message': message,
@@ -490,16 +497,14 @@ List<AiAgentAction> sanitizeAiAgentActions({
       case AiAgentTool.insertText:
         final value = action.value.trim();
         if (value.isEmpty) continue;
-        if (normalizedMessage.isNotEmpty &&
-            value == normalizedMessage) {
+        if (normalizedMessage.isNotEmpty && value == normalizedMessage) {
           continue;
         }
         result.add(action);
       case AiAgentTool.renameNote:
         final title = action.value.trim();
         if (title.isEmpty) continue;
-        if (currentNoteTitle != null &&
-            title == currentNoteTitle.trim()) {
+        if (currentNoteTitle != null && title == currentNoteTitle.trim()) {
           continue;
         }
         result.add(action);
@@ -514,8 +519,5 @@ List<AiAgentAction> sanitizeAiAgentActions({
 
 /// 归一化用于同文回声比较：trim + 去尾部中英文句末标点。
 String _normalizeForEcho(String source) {
-  return source
-      .trim()
-      .replaceAll(RegExp(r'[。！？.!?；;，,]*$'), '')
-      .trim();
+  return source.trim().replaceAll(RegExp(r'[。！？.!?；;，,]*$'), '').trim();
 }

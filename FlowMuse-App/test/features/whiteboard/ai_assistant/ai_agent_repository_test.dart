@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
@@ -71,6 +73,106 @@ AiAgentRepository _repositoryWith(_FakePost post) => AiAgentRepository(
 );
 
 void main() {
+  test('HTTP 流式正文在响应关闭前交给助手', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final finish = Completer<void>();
+    final requestBody = Completer<Map<String, Object?>>();
+    server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requestBody.complete(jsonDecode(body) as Map<String, Object?>);
+      request.response.headers.contentType = ContentType(
+        'text',
+        'event-stream',
+        charset: 'utf-8',
+      );
+      request.response.bufferOutput = false;
+      request.response.write(
+        'data: {"choices":[{"delta":{"content":"部分正文"}}]}\n\n',
+      );
+      await request.response.flush();
+      await finish.future;
+      request.response.write(
+        'data: {"choices":[{"delta":{"content":"完成"},"finish_reason":"stop"}]}\n\n',
+      );
+      await request.response.close();
+    });
+    final repository = AiAgentRepository(
+      config: AiAgentConfig(
+        baseUrl: 'http://127.0.0.1:${server.port}/v1',
+        apiKey: 'test-key',
+        model: 'test-model',
+      ),
+    );
+    final first = Completer<String>();
+    final result = repository.run(
+      instruction: '解释',
+      noteTitle: '',
+      texts: const [],
+      onText: (fragment) {
+        if (!first.isCompleted) first.complete(fragment);
+      },
+    );
+    try {
+      expect(await first.future.timeout(const Duration(seconds: 5)), '部分正文');
+      expect((await requestBody.future)['stream'], isTrue);
+    } finally {
+      finish.complete();
+    }
+    expect((await result).message, '部分正文完成');
+  });
+
+  test('查资料只发送单独填写的关键词，模型才收到笔记和检索摘要', () async {
+    final requests = <String>[];
+    final modelPost = _FakePost(200);
+    final repository = AiAgentRepository(
+      config: const AiAgentConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'model-key',
+        model: 'test-model',
+      ),
+      readSearchToken: () async => 'flowmuse-session',
+      post:
+          ({
+            required url,
+            headers = const {},
+            required body,
+            connectTimeoutMs = 8000,
+            readTimeoutMs = 15000,
+            cancelToken,
+          }) {
+            requests.add(url);
+            if (url.endsWith('/api/assistant/web-search')) {
+              expect(jsonDecode(body), {'query': '梯度消失'});
+              expect(headers['Authorization'], 'Bearer flowmuse-session');
+              return Future.value(
+                const NativeHttpResponse(
+                  statusCode: 200,
+                  body:
+                      '[{"title":"教程","url":"https://example.com/guide","snippet":"一段检索摘要"}]',
+                ),
+              );
+            }
+            expect(headers['Authorization'], 'Bearer model-key');
+            expect(body, contains('私有笔记正文'));
+            expect(body, contains('一段检索摘要'));
+            expect(body, isNot(contains('flowmuse-session')));
+            return modelPost.call(url: url, body: body);
+          },
+    );
+    final result = await repository.run(
+      instruction: '请结合我的笔记解释',
+      noteTitle: '课堂笔记',
+      texts: [AiNoteText(id: 't1', text: '私有笔记正文')],
+      webQuery: ' 梯度消失 ',
+    );
+    expect(requests, hasLength(2));
+    expect(
+      result.webSources.single.url,
+      Uri.parse('https://example.com/guide'),
+    );
+  });
+
   test('官方预设测试发送图片并按服务商添加兼容参数', () async {
     for (final provider in AiAgentProvider.values) {
       final post = _FakePost(200, insertedText: 'Blue');

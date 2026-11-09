@@ -22,6 +22,49 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final composer = find.byKey(const ValueKey('note-agent-composer'));
+
+  testWidgets('查资料按消息开启，流式正文先显示并可停止', (tester) async {
+    final completion = Completer<AiAgentResponse>();
+    final repository = _FakeAiAgentRepository(completer: completion);
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '',
+            texts: const [],
+            contextTruncated: false,
+            contextLabel: '未添加笔记来源',
+            sourceProvider: (scope) => readAiAgentSource(controller, scope),
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('搜索关键词'), findsNothing);
+    await tester.tap(find.byTooltip('查资料'));
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, '搜索关键词'), '梯度消失');
+    await tester.enterText(composer, '解释这段');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(repository.receivedWebQuery, '梯度消失');
+    repository.emitText!('逐段显示');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('逐段显示'), findsOneWidget);
+    await tester.tap(find.byTooltip('取消生成'));
+    completion.complete(const AiAgentResponse(message: '过期的完整回复', actions: []));
+    await tester.pumpAndSettle();
+    expect(repository.cancelToken!.isCancelled, isTrue);
+    expect(find.text('逐段显示'), findsOneWidget);
+    expect(find.text('过期的完整回复'), findsNothing);
+  });
+
   testWidgets('宽屏停靠可调宽，窄屏和键盘可操作，收起后保留输入', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1522,6 +1565,8 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final receivedTexts = <List<AiNoteText>>[];
   final receivedAttachments = <List<AiVisualAttachment>>[];
   NativeHttpCancelToken? cancelToken;
+  void Function(String)? emitText;
+  String? receivedWebQuery;
 
   @override
   Future<AiAgentResponse> run({
@@ -1531,11 +1576,15 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     List<AiAgentConversationTurn> conversation = const [],
     List<AiVisualAttachment> attachments = const [],
     NativeHttpCancelToken? cancelToken,
+    void Function(String)? onText,
+    String? webQuery,
   }) async {
     conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
     receivedAttachments.add(attachments);
     this.cancelToken = cancelToken;
+    emitText = onText;
+    receivedWebQuery = webQuery;
     if (completer != null) return completer!.future;
     if (conversation.isNotEmpty) {
       return const AiAgentResponse(

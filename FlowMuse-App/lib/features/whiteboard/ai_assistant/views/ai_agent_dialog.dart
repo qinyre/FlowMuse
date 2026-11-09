@@ -5,6 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../../../../shared/utils/ui_lifecycle.dart';
+import '../../../../shared/url_launcher/app_url_launcher.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
@@ -145,6 +146,10 @@ typedef _AiPanelTurn = ({
 
 class _AiAgentPanelState extends State<AiAgentPanel> {
   final _instructionController = TextEditingController();
+  final _searchController = TextEditingController();
+  bool _searchEnabled = false;
+  Timer? _streamRefresh;
+  String _streamPreview = '';
   final _instructionFocusNode = FocusNode();
   final _messageScroll = ScrollController();
   final _latestMessageKey = GlobalKey();
@@ -282,6 +287,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     unawaited(_speechSubscription?.cancel());
     if (_ownsSpeechService) unawaited(_speechService.dispose());
     _instructionController.dispose();
+    _searchController.dispose();
+    _streamRefresh?.cancel();
     _instructionFocusNode.dispose();
     _messageScroll.dispose();
     for (final controller in _actionControllers) {
@@ -597,7 +604,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   Future<void> _generate() async {
     final instruction = _instructionController.text.trim();
+    final webQuery = _searchEnabled ? _searchController.text.trim() : null;
     if (instruction.isEmpty ||
+        webQuery == '' ||
         _loading ||
         _applying ||
         _speechState != SpeechRecognitionState.idle) {
@@ -607,11 +616,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
     _cancelToken = cancelToken;
+    final streamedText = StringBuffer();
     setState(() {
       _stage = _AiGenerateStage.preparing;
       _loading = true;
       _error = null;
       _pendingInstruction = instruction;
+      _streamPreview = '';
       _showShortcuts = false;
       if (!isFollowUp) _selectedActions = const {};
     });
@@ -646,6 +657,35 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         conversation: _conversation,
         attachments: attachments,
         cancelToken: cancelToken,
+        webQuery: webQuery,
+        onText: (fragment) {
+          if (!mounted ||
+              !_loading ||
+              generation != _generation ||
+              cancelToken.isCancelled) {
+            return;
+          }
+          streamedText.write(fragment);
+          _streamRefresh ??= Timer(const Duration(milliseconds: 45), () {
+            _streamRefresh = null;
+            if (!mounted || generation != _generation) return;
+            final follow =
+                _messageScroll.hasClients &&
+                _messageScroll.position.extentAfter < 80;
+            setState(() => _streamPreview = streamedText.toString());
+            if (follow) {
+              runAfterUiFrame(() {
+                if (mounted &&
+                    generation == _generation &&
+                    _messageScroll.hasClients) {
+                  _messageScroll.jumpTo(
+                    _messageScroll.position.maxScrollExtent,
+                  );
+                }
+              });
+            }
+          });
+        },
       );
       if (!mounted || generation != _generation || cancelToken.isCancelled) {
         return;
@@ -656,6 +696,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         attachments: attachments,
       );
       _instructionController.clear();
+      _searchController.clear();
       _revealInConversation(_latestMessageKey);
     } on NativeHttpCancelledException {
       // 用户主动取消，不显示为失败。
@@ -668,7 +709,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         setState(() {
           _loading = false;
           _pendingInstruction = null;
+          _searchEnabled = webQuery != null && _error != null;
+          _streamPreview = _error == null ? '' : streamedText.toString();
         });
+        _streamRefresh?.cancel();
+        _streamRefresh = null;
         _lockPendingTextSource();
       }
     }
@@ -696,7 +741,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     );
     final effective = actions.length == response.actions.length
         ? response
-        : AiAgentResponse(message: response.message, actions: actions);
+        : AiAgentResponse(
+            message: response.message,
+            actions: actions,
+            webSources: response.webSources,
+          );
     for (final controller in _actionControllers) {
       controller.dispose();
     }
@@ -775,6 +824,15 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   }
 
   void _openCitation(String? href, _AiPanelTurn turn) {
+    if (href != null && href.startsWith('flowmuse-web:')) {
+      final index = int.tryParse(href.substring('flowmuse-web:'.length));
+      if (index != null &&
+          index > 0 &&
+          index <= turn.response.webSources.length) {
+        _openWebSource(turn.response.webSources[index - 1].url);
+      }
+      return;
+    }
     if (href == null || !href.startsWith('flowmuse-source:')) return;
     final match = RegExp(
       r'^flowmuse-source:(text|image)-([1-9][0-9]{0,5})$',
@@ -792,6 +850,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       _ => null,
     };
     _viewSource(location, turn);
+  }
+
+  Future<void> _openWebSource(Uri url) async {
+    if (!await AppUrlLauncher.launch(url) && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开网页')));
+    }
   }
 
   Widget _draftPreview(int index) {
@@ -825,6 +891,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                 top: block.role == NoteDraftRole.section ? 14 : 6,
               ),
               child: _previewDraftBlock(block, theme),
+            ),
+          if (_response?.webSources.isNotEmpty ?? false)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.listGap),
+              child: Text(
+                '确认后附上 ${_response!.webSources.length} 条网页参考资料',
+                style: theme.textTheme.bodySmall,
+              ),
             ),
         ],
       ),
@@ -869,10 +943,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _actionControllers.clear();
     _actionFocusNodes.clear();
     _instructionController.clear();
+    _searchController.clear();
     setState(() {
       _conversation = const [];
       _messages.clear();
       _pendingInstruction = null;
+      _streamPreview = '';
+      _searchEnabled = false;
       _showShortcuts = null;
       _applied = false;
       _actionSourceChanged = false;
@@ -901,6 +978,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   void _cancelGeneration() {
     _cancelToken?.cancel();
     _generation++;
+    _streamRefresh?.cancel();
+    _streamRefresh = null;
     setState(() {
       _loading = false;
       _pendingInstruction = null;
@@ -942,6 +1021,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       await widget.onApply(
         AiAgentResponse(
           message: response.message,
+          webSources: response.webSources,
           actions: [
             for (var index = 0; index < response.actions.length; index++)
               if (_selectedActions.contains(index)) _editedAction(index),
@@ -1156,11 +1236,18 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   if (shortcutsOpen) ..._shortcutWidgets(context),
                   if (_pendingInstruction case final pending?)
                     _userMessage(pending, key: _latestMessageKey),
-                  if (_loading) ...[
+                  if (_streamPreview.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.listGap),
+                      child: SelectableText(_streamPreview),
+                    )
+                  else if (_loading) ...[
                     const SizedBox(height: AppSpacing.controlGap),
                     Text(
                       _stage == _AiGenerateStage.preparing
                           ? '正在准备上下文…'
+                          : _searchEnabled
+                          ? '正在查找资料并生成回复…'
                           : response != null
                           ? '正在根据追问修改…'
                           : _attachments.isNotEmpty
@@ -1231,7 +1318,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               'reply-math-block': ReplyLatexBuilder(display: true),
               'reply-math-inline': ReplyLatexBuilder(),
             },
-            onTapLink: widget.onViewSource == null || _applying || _loading
+            imageBuilder: turn.response.webSources.isEmpty
+                ? null
+                : (_, _, _) => const SizedBox.shrink(),
+            onTapLink:
+                (widget.onViewSource == null &&
+                        turn.response.webSources.isEmpty) ||
+                    _applying ||
+                    _loading
                 ? null
                 : (_, href, _) => _openCitation(href, turn),
             styleSheet: MarkdownStyleSheet.fromTheme(
@@ -1240,6 +1334,25 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           ),
         ),
       ),
+      if (turn.response.webSources.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.controlGap),
+          child: Text('网页来源', style: Theme.of(context).textTheme.bodySmall),
+        ),
+        for (final (index, source) in turn.response.webSources.indexed)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _openWebSource(source.url),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: Text(
+                '${index + 1}. ${source.title}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+      ],
       if (widget.onViewSource != null) ...[
         if (turn.source != null ||
             turn.sourceTextIds.isNotEmpty ||
@@ -1744,6 +1857,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               ),
             ),
           ),
+          if (_searchEnabled)
+            KeyboardFocusRecoveryExclusion(
+              child: TextField(
+                controller: _searchController,
+                enabled: !_loading && !_applying,
+                maxLength: 200,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: '搜索关键词',
+                  helperText: '仅此关键词发送给网页搜索服务',
+                  counterText: '',
+                  isDense: true,
+                ),
+              ),
+            ),
           const SizedBox(height: 6),
           KeyboardFocusRecoveryExclusion(
             child: TextField(
@@ -1828,6 +1956,16 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   icon: const Icon(Icons.bookmark_add_outlined, size: 20),
                 ),
               const Spacer(),
+              if (widget.sourceProvider != null)
+                IconButton(
+                  tooltip: _searchEnabled ? '关闭查资料' : '查资料',
+                  isSelected: _searchEnabled,
+                  onPressed: busy
+                      ? null
+                      : () => setState(() => _searchEnabled = !_searchEnabled),
+                  icon: const Icon(Icons.travel_explore, size: 20),
+                  selectedIcon: const Icon(Icons.public, size: 20),
+                ),
               if (_speechAvailable)
                 IconButton(
                   tooltip: _speechState == SpeechRecognitionState.idle
@@ -1851,6 +1989,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ? _cancelGeneration
                     : _applying ||
                           instruction.isEmpty ||
+                          (_searchEnabled &&
+                              _searchController.text.trim().isEmpty) ||
                           _speechState != SpeechRecognitionState.idle
                     ? null
                     : _generate,

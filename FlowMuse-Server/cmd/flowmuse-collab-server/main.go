@@ -14,6 +14,7 @@ import (
 	"flowmuse/server/internal/recognition"
 	"flowmuse/server/internal/social"
 	"flowmuse/server/internal/storage"
+	"flowmuse/server/internal/websearch"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/zishang520/engine.io/v2/types"
@@ -89,6 +90,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
 	authAPI.Register(mux)
+	mux.Handle("POST "+websearch.Endpoint, websearch.Handler(cfg.BraveSearchAPIKey, authAPI.AuthenticateRequest))
 	socialStore := social.NewStore(db)
 	socialEnabled := cfg.SocialEnabled
 	if socialEnabled {
