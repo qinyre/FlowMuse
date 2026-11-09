@@ -183,8 +183,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('页码固定在工具区，Agent 展开和窄屏时仍可翻页及提问', (tester) async {
+  testWidgets('页码与手指绘制并排，Agent 展开和窄屏时仍可翻页及提问', (tester) async {
     final controller = _controller(4);
+    controller.renameDocument('分页测试笔记');
     addTearDown(controller.dispose);
     await tester.binding.setSurfaceSize(const Size(1280, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -194,6 +195,9 @@ void main() {
         MaterialApp(
           home: MarkdrawEditor(
             controller: controller,
+            onFingerDrawingEnabledChanged: (_) {},
+            onStartCollaboration: () async {},
+            onLeaveCollaboration: () async {},
             onAskCurrentPage: () => asked++,
             assistantPanel: agent ? const Text('Agent') : null,
           ),
@@ -203,12 +207,27 @@ void main() {
     }
 
     final pages = find.byType(PageNavigationControls);
-    final rail = find.byKey(const ValueKey('editor-tool-rail'));
+    final fingerDrawing = find.byType(Switch);
     Finder button(String label) => find.byWidgetPredicate(
       (widget) => widget is Semantics && widget.properties.label == label,
     );
     await showEditor();
-    expect(tester.getRect(rail).contains(tester.getCenter(pages)), isTrue);
+    expect(
+      tester.getCenter(pages).dy,
+      closeTo(tester.getCenter(fingerDrawing).dy, 1),
+    );
+    expect(
+      tester.getRect(pages).left,
+      greaterThan(tester.getRect(fingerDrawing).right),
+    );
+    expect(
+      tester.getRect(pages).overlaps(tester.getRect(find.text('分页测试笔记'))),
+      isFalse,
+    );
+    expect(
+      tester.getRect(pages).overlaps(tester.getRect(find.text('创建房间'))),
+      isFalse,
+    );
     expect(button('问这一页'), findsOneWidget);
     expect(
       tester
@@ -220,6 +239,10 @@ void main() {
     await showEditor(agent: true);
     final dock = find.byKey(const ValueKey('editor-assistant-panel'));
     expect(tester.getRect(pages).overlaps(tester.getRect(dock)), isFalse);
+    expect(
+      tester.getCenter(pages).dy,
+      closeTo(tester.getCenter(fingerDrawing).dy, 1),
+    );
     expect(button('多页预览'), findsOneWidget);
     await tester.tap(button('更多页面操作'));
     await tester.pumpAndSettle();
@@ -229,7 +252,10 @@ void main() {
 
     await tester.binding.setSurfaceSize(const Size(390, 780));
     await showEditor();
-    expect(tester.getRect(rail).contains(tester.getCenter(pages)), isTrue);
+    expect(
+      tester.getRect(pages).top,
+      greaterThanOrEqualTo(tester.getRect(fingerDrawing).bottom),
+    );
     expect(
       tester
           .getRect(pages)

@@ -907,11 +907,19 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final safeArea = MediaQuery.paddingOf(context);
     final showPageNavigation = showChrome && _controller.isPagedViewport;
     final markdownSplit = !isCompact && _controller.showMarkdownPanel;
-    final stackToolbar =
-        showPageNavigation && showTopToolbar && (isCompact || markdownSplit);
-    final showToolRail = showTopToolbar || showPageNavigation;
-    final chromeHeight =
-        56.0 + (showToolRail ? 56 : 0) + (stackToolbar ? 44 : 0);
+    final hasViewStatus =
+        widget.collaborationFocusLabel != null ||
+        widget.collaborationFollowLabel != null;
+    final minInlineWidth = hasViewStatus ? 1400.0 : 900.0;
+    final pageNavigationInline =
+        showPageNavigation &&
+        !isCompact &&
+        !markdownSplit &&
+        width - safeArea.horizontal >= minInlineWidth;
+    final pageRowHeight = showPageNavigation && !pageNavigationInline
+        ? 44.0
+        : 0.0;
+    final chromeHeight = 56.0 + pageRowHeight + (showTopToolbar ? 56.0 : 0.0);
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
@@ -921,7 +929,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             onOverview: _togglePageOverview,
             onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
             enabled: widget.pageNavigationEnabled,
-            compact: width < 1100 || markdownSplit,
+            compact: !pageNavigationInline || width < 1200,
           )
         : null;
     final showDetachedControls =
@@ -1090,6 +1098,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                               onChanged: widget.onFingerDrawingEnabledChanged!,
                             ),
                           ],
+                          if (pageNavigationInline &&
+                              pageNavigation != null) ...[
+                            const SizedBox(width: 8),
+                            pageNavigation,
+                          ],
                         ],
                       ),
                       trailing: Row(
@@ -1154,48 +1167,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       ),
                     ),
                   ),
-                  if (showPageNavigation)
-                    DecoratedBox(
-                      key: const ValueKey('editor-tool-rail'),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerLow,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Theme.of(context).colorScheme.outlineVariant,
-                          ),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: 56,
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: showTopToolbar
-                                        ? Center(
-                                            child: _buildToolbar(
-                                              compact: isCompact,
-                                            ),
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
-                                  if (!stackToolbar && pageNavigation != null)
-                                    pageNavigation,
-                                ],
-                              ),
-                            ),
-                            if (stackToolbar)
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: pageNavigation,
-                              ),
-                          ],
-                        ),
+                  if (!pageNavigationInline && pageNavigation != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: pageNavigation,
                       ),
                     ),
                 ],
@@ -1266,9 +1243,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               ),
             ),
           ),
-        if (showTopToolbar && !showPageNavigation)
+        if (showTopToolbar)
           Positioned(
-            top: safeArea.top + 60,
+            top: safeArea.top + 60 + pageRowHeight,
             left: 8,
             right: 8,
             child: Center(child: _buildToolbar(compact: isCompact)),
