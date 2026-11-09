@@ -17,6 +17,7 @@ import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -259,8 +260,62 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
-    expect(find.text('笔记 Agent'), findsOneWidget);
+    expect(find.text('AI笔记助手'), findsOneWidget);
     expect(find.byTooltip('追问修改'), findsOneWidget);
+  });
+
+  testWidgets('聊天回复渲染行内与独立 LaTeX，保留代码、金额和无效公式', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: r'''
+### 欧拉公式
+$$e^{i\theta}=\cos\theta+i\sin\theta$$
+当 $\theta=\pi$ 时，也可写成 \(e^{i\pi}=-1\)。
+
+\[
+e^{i\pi}+1=0
+\]
+
+`$x$` 是示例代码，价格是 $20 和 $30。
+
+$$\sum_{n=1}^{\infty}\frac{1}{n^s}=\prod_p\frac{1}{1-p^{-s}}$$
+
+$$\notARealCommand{x}$$
+''',
+          actions: [],
+        ),
+      ),
+      onApply: (_) async {},
+    );
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+
+    final reply = find.byType(MarkdownBody);
+    final formulas = tester.widgetList<Math>(
+      find.descendant(of: reply, matching: find.byType(Math)),
+    );
+    expect(
+      formulas.where((math) => math.mathStyle == MathStyle.text),
+      hasLength(2),
+    );
+    expect(
+      formulas.where((math) => math.mathStyle == MathStyle.display),
+      hasLength(4),
+    );
+    expect(
+      find.ancestor(of: reply, matching: find.byType(SelectionArea)),
+      findsOneWidget,
+    );
+    expect(find.textContaining(r'$x$', findRichText: true), findsOneWidget);
+    expect(
+      find.textContaining(r'$20 和 $30', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.textContaining(r'$$\sum_{n=1}'), findsNothing);
+    expect(find.text(r'$$\notARealCommand{x}$$'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('清除对话会清空当前回复和后续请求历史', (tester) async {
@@ -371,10 +426,7 @@ void main() {
     await tester.tap(find.text('保存为常用指令'));
     await tester.pumpAndSettle();
     expect(
-      find.widgetWithText(
-        InputChip,
-        '给我一份可复用的课堂笔记模板，包含核心概念、例题和待复习问题。',
-      ),
+      find.widgetWithText(InputChip, '给我一份可复用的课堂笔记模板，包含核心概念、例题和待复习问题。'),
       findsOneWidget,
     );
     await tester.tap(find.byTooltip('选择来源'));

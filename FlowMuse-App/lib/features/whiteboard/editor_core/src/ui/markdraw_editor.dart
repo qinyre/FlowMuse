@@ -826,11 +826,13 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       child: Visibility(
                         visible: showingAssistant,
                         maintainState: true,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colors.surface,
+                        child: Container(
+                          color: colors.surfaceContainer,
+                          foregroundDecoration: BoxDecoration(
                             border: Border(
-                              left: BorderSide(color: colors.outlineVariant),
+                              left: docked
+                                  ? BorderSide(color: colors.outlineVariant)
+                                  : BorderSide.none,
                             ),
                           ),
                           child: SafeArea(

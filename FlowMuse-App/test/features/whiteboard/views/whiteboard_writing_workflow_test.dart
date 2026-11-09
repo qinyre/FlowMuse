@@ -128,7 +128,7 @@ void main() {
     final referenceRect = tester.getRect(referenceCanvas);
     tester.widget<MarkdrawEditor>(editor).onAiPressed!();
     await tester.pumpAndSettle();
-    expect(find.text('笔记 Agent'), findsOneWidget);
+    expect(find.text('AI笔记助手'), findsOneWidget);
     expect(tester.getRect(referenceCanvas), referenceRect);
     expect(
       tester
@@ -136,7 +136,7 @@ void main() {
           .overlaps(referenceRect),
       isFalse,
     );
-    await tester.tap(find.byTooltip('收起笔记 Agent'));
+    await tester.tap(find.byTooltip('收起AI笔记助手'));
     await tester.pumpAndSettle();
     final mainX = tester.getCenter(editor).dx;
     await tester.tap(find.byTooltip('参考笔记选项'));
@@ -200,6 +200,7 @@ void main() {
 
     final noteSource = find.text('整篇笔记（仅文字）').hitTestable();
     expect(noteSource, findsOneWidget);
+    expect(find.text('选区截图'), findsNothing);
     final item = tester.getBottomLeft(noteSource);
     expect(item.dy, lessThan(sourceOrigin.dy));
     expect(item.dx, greaterThan(sourceOrigin.dx));
@@ -413,10 +414,13 @@ void main() {
     await tester.pump();
     tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
     await tester.pumpAndSettle();
-    expect(find.text('选区截图'), findsNothing);
-    await tester.tap(find.byTooltip('选择来源'));
-    await tester.pumpAndSettle();
-    final screenshot = find.text('选区截图');
+    final screenshot = find.byTooltip('选区截图');
+    final shortcuts = find.byTooltip('收起快捷指令');
+    expect(tester.getCenter(screenshot).dy, tester.getCenter(shortcuts).dy);
+    expect(
+      tester.getRect(screenshot).left - tester.getRect(shortcuts).right,
+      inInclusiveRange(0, 12),
+    );
     await tester.tap(screenshot);
     await tester.pump();
 

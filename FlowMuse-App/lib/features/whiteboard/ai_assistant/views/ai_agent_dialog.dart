@@ -19,6 +19,7 @@ import '../repositories/ai_prompt_store.dart';
 import '../../speech_recognition/models/speech_recognition_event.dart';
 import '../../speech_recognition/services/speech_recognition_service.dart';
 import '../../speech_recognition/services/speech_recognition_service_factory.dart';
+import 'reply_latex.dart';
 
 typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
 
@@ -997,7 +998,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     final instruction = _instructionController.text.trim();
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: colors.surface,
+      color: colors.surfaceContainer,
       child: Column(
         children: [
           Container(
@@ -1009,7 +1010,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               4,
             ),
             decoration: BoxDecoration(
-              color: colors.surfaceContainerLow,
               border: Border(bottom: BorderSide(color: colors.outlineVariant)),
             ),
             child: Row(
@@ -1035,7 +1035,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '笔记 Agent',
+                        'AI笔记助手',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -1069,7 +1069,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     icon: const Icon(Icons.edit_square),
                   ),
                 IconButton(
-                  tooltip: '收起笔记 Agent',
+                  tooltip: '收起AI笔记助手',
                   onPressed: _applying
                       ? null
                       : () {
@@ -1184,15 +1184,22 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           color: colors.surface,
           borderRadius: BorderRadius.circular(AppSpacing.radius),
         ),
-        child: MarkdownBody(
-          data: turn.response.message,
-          selectable: true,
-          onTapLink: widget.onViewSource == null || _applying || _loading
-              ? null
-              : (_, href, _) => _openCitation(href, turn),
-          styleSheet: MarkdownStyleSheet.fromTheme(
-            Theme.of(context),
-          ).copyWith(p: TextStyle(color: colors.onSurface)),
+        child: SelectionArea(
+          child: MarkdownBody(
+            data: turn.response.message,
+            blockSyntaxes: [ReplyBlockLatex()],
+            inlineSyntaxes: [ReplyInlineLatex()],
+            builders: {
+              'reply-math-block': ReplyLatexBuilder(display: true),
+              'reply-math-inline': ReplyLatexBuilder(),
+            },
+            onTapLink: widget.onViewSource == null || _applying || _loading
+                ? null
+                : (_, href, _) => _openCitation(href, turn),
+            styleSheet: MarkdownStyleSheet.fromTheme(
+              Theme.of(context),
+            ).copyWith(p: TextStyle(color: colors.onSurface)),
+          ),
         ),
       ),
       if (widget.onViewSource != null) ...[
@@ -1763,6 +1770,17 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                 icon: const Icon(Icons.bolt_outlined, size: 20),
                 selectedIcon: const Icon(Icons.bolt, size: 20),
               ),
+              if (widget.sourceProvider != null &&
+                  (widget.onRegionCapture != null ||
+                      widget.onCaptureSelection != null))
+                IconButton(
+                  tooltip: '选区截图',
+                  onPressed:
+                      busy || _attachments.length >= maxAiVisualAttachments
+                      ? null
+                      : _captureSelection,
+                  icon: const Icon(Icons.crop_free, size: 20),
+                ),
               if (widget.sourceProvider == null)
                 IconButton(
                   tooltip: '保存为常用指令',
@@ -1824,14 +1842,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           (AiAgentScope.note, Icons.notes_outlined, '整篇笔记（仅文字）'),
         ])
           _composerMenuItem(label, icon, () => _selectSource(scope)),
-        if (widget.onRegionCapture != null || widget.onCaptureSelection != null)
-          _composerMenuItem(
-            '选区截图',
-            Icons.add_a_photo_outlined,
-            _attachments.length >= maxAiVisualAttachments
-                ? null
-                : _captureSelection,
-          ),
         if (widget.onCaptureCurrentPdfPage case final capture?)
           _composerMenuItem(
             'PDF 页',
