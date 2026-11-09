@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
@@ -10,12 +11,14 @@ class PageNavigationControls extends StatefulWidget {
     required this.onOverview,
     this.enabled = true,
     this.onAskCurrentPage,
+    this.compact = false,
   });
 
   final MarkdrawController controller;
   final VoidCallback onOverview;
   final bool enabled;
   final VoidCallback? onAskCurrentPage;
+  final bool compact;
 
   @override
   State<PageNavigationControls> createState() => _PageNavigationControlsState();
@@ -65,7 +68,26 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
     final enabled = widget.enabled;
     final pages = controller.layout.pages;
     final index = controller.pagedViewportMetrics?.currentPageIndex ?? 0;
+    final pageId = index < pages.length ? pages[index].id : null;
     final rtl = controller.layout.isRightToLeft;
+    final pageActions = <(String, IconData, VoidCallback?)>[
+      (
+        '适合当前页',
+        Icons.fit_screen,
+        pageId != null
+            ? () => controller.navigateToPage(pageId, fit: true)
+            : null,
+      ),
+      if (widget.onAskCurrentPage != null)
+        ('问这一页', Icons.auto_awesome_outlined, widget.onAskCurrentPage),
+      (
+        '返回跳转前位置',
+        Icons.undo,
+        controller.canReturnToPagePosition
+            ? controller.returnToPagePosition
+            : null,
+      ),
+    ];
     Widget button(String label, IconData icon, VoidCallback? action) =>
         HoverTooltip(
           message: label,
@@ -75,7 +97,7 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
             child: IconButton(
               onPressed: enabled ? action : null,
               icon: Icon(icon, size: 16),
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               padding: const EdgeInsets.all(4),
               style: const ButtonStyle(
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -83,72 +105,82 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
             ),
           ),
         );
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            button(
-              '上一页',
-              rtl ? Icons.chevron_right : Icons.chevron_left,
-              index > 0
-                  ? () => controller.navigateToPage(pages[index - 1].id)
-                  : null,
+        button(
+          '上一页',
+          rtl ? Icons.chevron_right : Icons.chevron_left,
+          index > 0
+              ? () => controller.navigateToPage(pages[index - 1].id)
+              : null,
+        ),
+        Semantics(
+          label: '第 ${index + 1} 页，共 ${pages.length} 页，点击跳转',
+          button: true,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: const Size(64, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            Semantics(
-              label: '第 ${index + 1} 页，共 ${pages.length} 页，点击跳转',
-              button: true,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(56, 40),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: enabled
-                    ? () => showPageJumpDialog(context, controller)
-                    : null,
+            onPressed: enabled
+                ? () => showPageJumpDialog(context, controller)
+                : null,
+            child: SizedBox(
+              width: 56,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
                 child: Text(
                   '${index + 1} / ${pages.length}',
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
             ),
-            button(
-              '下一页',
-              rtl ? Icons.chevron_left : Icons.chevron_right,
-              index + 1 < pages.length
-                  ? () => controller.navigateToPage(pages[index + 1].id)
-                  : null,
-            ),
-          ],
+          ),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            button('多页预览', Icons.grid_view_outlined, widget.onOverview),
-            button(
-              '适合当前页',
-              Icons.fit_screen,
-              pages.isEmpty
-                  ? null
-                  : () => controller.navigateToPage(pages[index].id, fit: true),
-            ),
-            if (widget.onAskCurrentPage != null)
-              button(
-                '问这一页',
-                Icons.auto_awesome_outlined,
-                widget.onAskCurrentPage,
-              ),
-            button(
-              '返回跳转前位置',
-              Icons.undo,
-              controller.canReturnToPagePosition
-                  ? controller.returnToPagePosition
-                  : null,
-            ),
-          ],
+        button(
+          '下一页',
+          rtl ? Icons.chevron_left : Icons.chevron_right,
+          index + 1 < pages.length
+              ? () => controller.navigateToPage(pages[index + 1].id)
+              : null,
         ),
+        const SizedBox(width: 4),
+        const SizedBox(height: 20, child: VerticalDivider(width: 1)),
+        const SizedBox(width: 4),
+        button('多页预览', Icons.grid_view_outlined, widget.onOverview),
+        if (widget.compact)
+          Builder(
+            builder: (anchor) => button('更多页面操作', Icons.more_horiz, () async {
+              final action = await showAnchoredPopupMenu<VoidCallback>(
+                context: anchor,
+                items: [
+                  for (final (label, icon, action) in pageActions)
+                    PopupMenuItem(
+                      value: action,
+                      enabled: action != null,
+                      child: Row(
+                        children: [
+                          Icon(icon, size: 18),
+                          const SizedBox(width: 10),
+                          Flexible(child: Text(label)),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+              if (mounted &&
+                  widget.enabled &&
+                  widget.controller == controller &&
+                  !controller.isDisposed) {
+                action?.call();
+              }
+            }),
+          )
+        else
+          for (final (label, icon, action) in pageActions)
+            button(label, icon, action),
       ],
     );
   }

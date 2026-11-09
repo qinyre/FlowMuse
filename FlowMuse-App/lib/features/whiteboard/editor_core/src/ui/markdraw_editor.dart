@@ -92,6 +92,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
     this.assistantPanel,
+    this.assistantPanelVisible = true,
+    this.assistantSourceAction,
     this.selectionActions = const {},
     this.onAskCurrentPage,
     this.canvasOverlayBuilder,
@@ -188,6 +190,8 @@ class MarkdrawEditor extends StatefulWidget {
 
   final VoidCallback? onAiPressed;
   final Widget? assistantPanel;
+  final bool assistantPanelVisible;
+  final Widget? assistantSourceAction;
   final Map<String, VoidCallback> selectionActions;
   final VoidCallback? onAskCurrentPage;
   final Widget Function(ViewportState viewport)? canvasOverlayBuilder;
@@ -244,7 +248,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
   static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
-  static const _pageNavigationReservedExtent = 92.0;
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
@@ -253,6 +256,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomRight;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
+  double _assistantWidth = 360;
   String _propertyPanelContext = '';
   late final SpeechRecognitionService _speechService;
   StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
@@ -494,7 +498,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     });
   }
 
-  Size _getCanvasSize() => context.size ?? const Size(800, 600);
+  Size _getCanvasSize() => _controller.canvasSize.isEmpty
+      ? context.size ?? const Size(800, 600)
+      : _controller.canvasSize;
 
   void _noop() {}
 
@@ -770,11 +776,26 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           backgroundColor: parseColor(_controller.canvasBackgroundColor),
           body: LayoutBuilder(
             builder: (context, constraints) {
+              final hasAssistant = widget.assistantPanel != null;
+              final canDock = constraints.maxWidth >= 1000;
+              final showingAssistant =
+                  hasAssistant &&
+                  widget.assistantPanelVisible &&
+                  (canDock || widget.assistantSourceAction == null);
+              final dockWidth = _assistantWidth
+                  .clamp(
+                    320.0,
+                    max(320.0, min(520.0, constraints.maxWidth - 640)),
+                  )
+                  .toDouble();
+              final docked = showingAssistant && canDock;
+              final canvasWidth =
+                  constraints.maxWidth - (docked ? dockWidth : 0);
               final isCompact =
-                  constraints.maxWidth < 720 ||
-                  constraints.maxWidth < widget.config.compactBreakpoint;
+                  canvasWidth < 720 ||
+                  canvasWidth < widget.config.compactBreakpoint;
               _controller.lastCanvasSize = Size(
-                constraints.maxWidth,
+                canvasWidth,
                 constraints.maxHeight,
               );
               if (isCompact != _controller.isCompact) {
@@ -784,10 +805,82 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   }
                 });
               }
-              return _buildBody(
-                isCompact: isCompact,
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
+              final colors = Theme.of(context).colorScheme;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    right: docked ? dockWidth : 0,
+                    child: _buildBody(
+                      isCompact: isCompact,
+                      width: canvasWidth,
+                      height: constraints.maxHeight,
+                    ),
+                  ),
+                  if (hasAssistant)
+                    Positioned(
+                      key: const ValueKey('editor-assistant-panel'),
+                      top: 0,
+                      bottom: 0,
+                      right: 0,
+                      width: canDock ? dockWidth : constraints.maxWidth,
+                      child: Visibility(
+                        visible: showingAssistant,
+                        maintainState: true,
+                        child: Container(
+                          color: colors.surfaceContainer,
+                          foregroundDecoration: BoxDecoration(
+                            border: Border(
+                              left: docked
+                                  ? BorderSide(color: colors.outlineVariant)
+                                  : BorderSide.none,
+                            ),
+                          ),
+                          child: SafeArea(
+                            top: false,
+                            child: Column(
+                              children: [
+                                Expanded(child: widget.assistantPanel!),
+                                if (docked)
+                                  if (widget.assistantSourceAction
+                                      case final action?)
+                                    Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: action,
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (docked)
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: dockWidth - 4,
+                      width: 8,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: GestureDetector(
+                          key: const ValueKey('editor-assistant-divider'),
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragUpdate: (event) => setState(() {
+                            _assistantWidth = (dockWidth - event.delta.dx)
+                                .clamp(
+                                  320.0,
+                                  min(520.0, constraints.maxWidth - 640),
+                                );
+                          }),
+                        ),
+                      ),
+                    ),
+                  if (!canDock && widget.assistantSourceAction != null)
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: widget.assistantSourceAction!,
+                    ),
+                ],
               );
             },
           ),
@@ -814,27 +907,33 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         !_toolbarCollapsed;
     final propertyPanelOnRight = _toolbarDock == ToolbarDock.left;
     final safeArea = MediaQuery.paddingOf(context);
-    final chromeHeight = showTopToolbar ? 112.0 : 56.0;
+    final showPageNavigation = showChrome && _controller.isPagedViewport;
+    final markdownSplit = !isCompact && _controller.showMarkdownPanel;
+    final hasViewStatus =
+        widget.collaborationFocusLabel != null ||
+        widget.collaborationFollowLabel != null;
+    final minInlineWidth = hasViewStatus ? 1400.0 : 900.0;
+    final pageNavigationInline =
+        showPageNavigation &&
+        !isCompact &&
+        !markdownSplit &&
+        width - safeArea.horizontal >= minInlineWidth;
+    final pageRowHeight = showPageNavigation && !pageNavigationInline
+        ? 44.0
+        : 0.0;
+    final chromeHeight = 56.0 + pageRowHeight + (showTopToolbar ? 56.0 : 0.0);
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
-    final showPageNavigation = showChrome && _controller.isPagedViewport;
-    final inlinePageNavigation =
-        showPageNavigation && showTopToolbar && !isCompact;
-    final topToolbarOffset = safeArea.top + 60;
     final pageNavigation = showPageNavigation
-        ? _buildControlSurface(
-            PageNavigationControls(
-              controller: _controller,
-              onOverview: _togglePageOverview,
-              onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
-              enabled: widget.pageNavigationEnabled,
-            ),
+        ? PageNavigationControls(
+            controller: _controller,
+            onOverview: _togglePageOverview,
+            onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
+            enabled: widget.pageNavigationEnabled,
+            compact: !pageNavigationInline || width < 1200,
           )
         : null;
-    final rightChromeOffset =
-        (inlinePageNavigation ? topToolbarOffset : topChromeOffset) +
-        (showPageNavigation ? _pageNavigationReservedExtent : 0);
     final showDetachedControls =
         showChrome && (!_controller.viewMode || widget.config.showZoomControls);
     final controlGroupAtTop =
@@ -845,65 +944,30 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         _controlGroupPosition == ControlGroupPosition.bottomLeft;
     final propertyPanelSharesControls =
         showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
-    var propertyPanelTop =
-        (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
+    final propertyPanelTop =
+        topChromeOffset +
         (propertyPanelSharesControls && controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
-    var propertyPanelBottom =
+    final propertyPanelBottom =
         bottomChromeOffset +
         (propertyPanelSharesControls && !controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
-    final hasAssistant = widget.assistantPanel != null;
-    final assistantToolbarInset =
-        showNavigationTools && _toolbarDock != ToolbarDock.top ? 52.0 : 0.0;
     final showProperties =
         showEditChrome &&
         overview == null &&
         !isCompact &&
         widget.config.showPropertyPanel &&
         (_controller.selectedElements.isNotEmpty || _controller.isCreationTool);
-    final assistantSharesControls =
-        showDetachedControls && propertyPanelOnRight == controlGroupOnLeft;
-    final assistantTopInset =
-        (propertyPanelOnRight ? topChromeOffset : rightChromeOffset) +
-        (assistantSharesControls && controlGroupAtTop
-            ? _controlGroupReservedExtent
-            : 0);
-    final assistantBottomInset =
-        bottomChromeOffset +
-        (assistantSharesControls && !controlGroupAtTop
-            ? _controlGroupReservedExtent
-            : 0);
-    // Keep the input and footer reachable when the keyboard reduces the editor.
-    final assistantTop = min(
-      showProperties && !_propertyPanelCollapsed
-          ? max(propertyPanelTop, assistantTopInset)
-          : assistantTopInset,
-      max(safeArea.top + 12, height - 252),
-    );
-    final assistantBottom = min(
-      showProperties && !_propertyPanelCollapsed
-          ? max(propertyPanelBottom, assistantBottomInset)
-          : assistantBottomInset,
-      max(bottomChromeOffset, height - assistantTop - 240),
-    );
-    if (hasAssistant && !_propertyPanelCollapsed) {
-      propertyPanelTop = assistantTop;
-      propertyPanelBottom = assistantBottom;
-    }
     final controlGroupSharesVerticalToolbar =
         showNavigationTools &&
         _toolbarDock != ToolbarDock.top &&
         ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
     final verticalToolbarTop =
         controlGroupSharesVerticalToolbar && controlGroupAtTop
-        ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset) +
-              _controlGroupReservedExtent
-        : showPageNavigation && _toolbarDock == ToolbarDock.right
-        ? rightChromeOffset
-        : safeArea.top + 56;
+        ? topChromeOffset + _controlGroupReservedExtent
+        : safeArea.top + chromeHeight;
     final verticalToolbarBottom =
         controlGroupSharesVerticalToolbar && !controlGroupAtTop
         ? bottomChromeOffset + _controlGroupReservedExtent
@@ -1036,6 +1100,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                               onChanged: widget.onFingerDrawingEnabledChanged!,
                             ),
                           ],
+                          if (pageNavigationInline &&
+                              pageNavigation != null) ...[
+                            const SizedBox(width: 8),
+                            pageNavigation,
+                          ],
                         ],
                       ),
                       trailing: Row(
@@ -1100,6 +1169,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       ),
                     ),
                   ),
+                  if (!pageNavigationInline && pageNavigation != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: pageNavigation,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1168,29 +1245,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               ),
             ),
           ),
-        if (showNavigationTools && showTopToolbar)
+        if (showTopToolbar)
           Positioned(
-            top: topToolbarOffset,
-            left: inlinePageNavigation ? safeArea.left + 12 : 8,
-            right: inlinePageNavigation ? safeArea.right + 12 : 8,
-            child: inlinePageNavigation
-                ? SizedBox(
-                    height: _pageNavigationReservedExtent,
-                    child: NavigationToolbar(
-                      middleSpacing: 12,
-                      middle: Align(
-                        alignment: Alignment.topCenter,
-                        widthFactor: 1,
-                        child: _buildToolbar(compact: isCompact),
-                      ),
-                      trailing: Align(
-                        alignment: Alignment.topRight,
-                        widthFactor: 1,
-                        child: pageNavigation,
-                      ),
-                    ),
-                  )
-                : Center(child: _buildToolbar(compact: isCompact)),
+            top: safeArea.top + 60 + pageRowHeight,
+            left: 8,
+            right: 8,
+            child: Center(child: _buildToolbar(compact: isCompact)),
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
@@ -1207,17 +1267,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   : _buildToolbar(compact: isCompact),
             ),
           ),
-        if (pageNavigation != null && !inlinePageNavigation)
-          Positioned(
-            top: topChromeOffset,
-            right: safeArea.right + 12,
-            child: pageNavigation,
-          ),
         if (showDetachedControls)
           Positioned(
-            top: controlGroupAtTop
-                ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset)
-                : null,
+            top: controlGroupAtTop ? topChromeOffset : null,
             bottom: controlGroupAtTop ? null : bottomChromeOffset,
             left: controlGroupOnLeft
                 ? (overview != null && overviewOnLeft ? 304 : 12)
@@ -1251,7 +1303,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     )
                   : PropertyPanel(
                       controller: _controller,
-                      expand: hasAssistant,
                       onCollapse: _collapsePropertyPanel,
                       dockOnRight: propertyPanelOnRight,
                       selectionActions: widget.selectionActions,
@@ -1262,7 +1313,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
         if (overview != null)
           Positioned(
-            top: overviewOnLeft ? topChromeOffset : rightChromeOffset,
+            top: topChromeOffset,
             bottom: bottomChromeOffset,
             left: overviewOnLeft ? 12 : null,
             right: overviewOnLeft ? null : 12,
@@ -1304,29 +1355,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               ),
             ),
           ),
-        if (hasAssistant)
-          Positioned(
-            key: const ValueKey('editor-assistant-panel'),
-            top: assistantTop,
-            bottom: assistantBottom,
-            left: propertyPanelOnRight
-                ? safeArea.left + 12 + assistantToolbarInset
-                : null,
-            right: propertyPanelOnRight
-                ? null
-                : safeArea.right + 12 + assistantToolbarInset,
-            width: min(
-              width >= 1400 ? 420.0 : 360.0,
-              max(
-                0.0,
-                width - safeArea.horizontal - 24 - assistantToolbarInset,
-              ),
-            ),
-            child: widget.assistantPanel!,
-          ),
       ],
     );
-    if (!isCompact && _controller.showMarkdownPanel) {
+    if (markdownSplit) {
       body = MarkdrawSplitPane(controller: _controller, child: body);
     }
     return body;

@@ -9,8 +9,9 @@ import 'visual_attachment_capture.dart';
 
 AiAgentSource readAiAgentSource(
   MarkdrawController controller,
-  AiAgentScope scope,
-) {
+  AiAgentScope scope, {
+  bool selectionTextOnly = false,
+}) {
   final scene = controller.currentScene;
   final layout = controller.layout;
   final visible = controller.editorState.viewport.visibleRect(
@@ -44,7 +45,10 @@ AiAgentSource readAiAgentSource(
     }
   }
   final elements = switch (scope) {
-    AiAgentScope.selection => selected.values,
+    AiAgentScope.selection =>
+      selectionTextOnly
+          ? selected.values.whereType<TextElement>()
+          : selected.values,
     AiAgentScope.page => [
       for (final element in scene.elements)
         if (!element.isDeleted && pageIndex(element) == page!.index) element,
