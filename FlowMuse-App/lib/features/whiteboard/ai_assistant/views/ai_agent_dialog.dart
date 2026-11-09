@@ -92,6 +92,7 @@ class AiAgentPanel extends StatefulWidget {
     this.sourceProvider,
     this.initialSourceCapture,
     this.initialSourceLocation,
+    this.automaticTextSource,
     this.onViewSource,
     this.initialInstruction,
     required this.promptStore,
@@ -122,6 +123,7 @@ class AiAgentPanel extends StatefulWidget {
   final AiAgentSource Function(AiAgentScope scope)? sourceProvider;
   final Future<AiVisualAttachment?> Function()? initialSourceCapture;
   final AiSourceLocation? initialSourceLocation;
+  final ValueNotifier<AiAgentSource?>? automaticTextSource;
   final String? Function(AiSourceLocation location)? onViewSource;
   final String? initialInstruction;
   final AiPromptStore promptStore;
@@ -173,6 +175,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _ownsSpeechSession = false;
   List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
+  AiAgentSource? _pendingTextSource;
   AiSourceLocation? _sourceLocation;
   String? _citationNotice;
   _AiPanelTurn? _citationNoticeTurn;
@@ -213,6 +216,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         widget.initialSourceCapture ?? widget.onCaptureSelection;
     _needsSourceImage = widget.initialSourceCapture != null;
     _sourceLocation = widget.initialSourceLocation;
+    widget.automaticTextSource?.addListener(_onAutomaticTextSource);
     if (initialCapture != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -241,6 +245,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   @override
   void didUpdateWidget(covariant AiAgentPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.automaticTextSource != widget.automaticTextSource) {
+      oldWidget.automaticTextSource?.removeListener(_onAutomaticTextSource);
+      widget.automaticTextSource?.addListener(_onAutomaticTextSource);
+    }
     if (identical(oldWidget, widget)) return;
     final incoming = widget;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -268,6 +276,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   @override
   void dispose() {
+    widget.automaticTextSource?.removeListener(_onAutomaticTextSource);
     _cancelToken?.cancel();
     unawaited(_speechService.cancel());
     unawaited(_speechSubscription?.cancel());
@@ -390,15 +399,36 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _replaceSource(source);
   }
 
-  void _replaceSource(AiAgentSource source) {
+  void _onAutomaticTextSource() {
+    // Applying a reply can select the elements it just inserted.
+    if (_applying) return;
+    _pendingTextSource = widget.automaticTextSource?.value;
+    _lockPendingTextSource();
+  }
+
+  void _lockPendingTextSource() {
+    final source = _pendingTextSource;
+    if (source == null || _loading || _applying || _capturing) return;
+    _replaceSource(source, keepManualAttachments: true);
+  }
+
+  void _replaceSource(
+    AiAgentSource source, {
+    bool keepManualAttachments = false,
+  }) {
+    _pendingTextSource = null;
     final capture = source.capture;
     setState(() {
       // Keep visible messages, but stop resending history from the old source.
       _conversation = const [];
       _selectedActions = const {};
       _actionSourceChanged = true;
-      _attachments = const [];
-      _activeSelectionSlot = null;
+      if (keepManualAttachments) {
+        _removeActiveSelectionSlot();
+      } else {
+        _attachments = const [];
+        _activeSelectionSlot = null;
+      }
       _attachmentNotice = null;
       _context = source.context;
       _sourceLocation = source.location;
@@ -461,7 +491,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     } catch (error) {
       if (mounted) setState(() => _error = _errorMessage(error));
     } finally {
-      if (mounted) setState(() => _capturing = false);
+      if (mounted) {
+        setState(() => _capturing = false);
+        _lockPendingTextSource();
+      }
     }
   }
 
@@ -521,7 +554,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           setState(() => _error = message);
       }
     } finally {
-      if (mounted) setState(() => _capturing = false);
+      if (mounted) {
+        setState(() => _capturing = false);
+        _lockPendingTextSource();
+      }
     }
   }
 
@@ -633,6 +669,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           _loading = false;
           _pendingInstruction = null;
         });
+        _lockPendingTextSource();
       }
     }
   }
@@ -869,6 +906,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       _pendingInstruction = null;
       _error = '已取消生成';
     });
+    _lockPendingTextSource();
   }
 
   AiAgentAction _editedAction(int index) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -168,6 +169,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
   AiAgentPanel? _aiPanel;
+  final _aiTextSelectionSource = ValueNotifier<AiAgentSource?>(null);
+  Set<ElementId> _lastAiSelection = const {};
   bool _aiPanelExpanded = false;
   bool _aiCaptureModeActive = false;
   AiSourceLocation? _viewedAiSource;
@@ -224,6 +227,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return stampCreatorOnResult(result, scene, creator);
     };
     _markdrawController.addListener(_onControllerNotifyForFocus);
+    _markdrawController.addListener(_onAiSelectionChanged);
     _markdrawController.addListener(_scheduleReadingPosition);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
@@ -313,6 +317,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _remoteCollaborators.dispose();
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
+    _markdrawController.removeListener(_onAiSelectionChanged);
+    _aiTextSelectionSource.dispose();
     _markdrawController.removeListener(_scheduleReadingPosition);
     _markdrawController.removeListener(_onControllerNotifyForCollaboration);
     _smartLayoutV3Scope?.dispose();
@@ -958,6 +964,36 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _openAiAgent(hasSelection ? AiAgentScope.selection : AiAgentScope.none);
   }
 
+  void _onAiSelectionChanged() {
+    final selected = _markdrawController.editorState.selectedIds;
+    final previous = _lastAiSelection;
+    if (identical(selected, previous)) return;
+    _lastAiSelection = selected;
+    if (!_aiPanelExpanded ||
+        _aiCaptureModeActive ||
+        _smartLayoutV3PanelVisible ||
+        _viewedAiSource != null ||
+        _loadingScene ||
+        _applyingRemoteScene ||
+        _disposingOrLeaving ||
+        selected.isEmpty ||
+        setEquals(selected, previous)) {
+      return;
+    }
+    runWhenContextStable(context, () {
+      if (!_aiPanelExpanded || !identical(selected, _lastAiSelection)) return;
+      try {
+        _aiTextSelectionSource.value = readAiAgentSource(
+          _markdrawController,
+          AiAgentScope.selection,
+          selectionTextOnly: true,
+        );
+      } on StateError {
+        // A selection without readable text leaves the locked source alone.
+      }
+    });
+  }
+
   void _openAiAgent(AiAgentScope scope, {String? instruction}) {
     if (_aiCaptureModeActive || _loadingScene || _openError != null) return;
     final AiAgentSource source;
@@ -981,6 +1017,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       onRegionCapture: _startRegionCapture,
       initialSourceCapture: source.capture,
       initialSourceLocation: source.location,
+      automaticTextSource: _aiTextSelectionSource,
       initialInstruction:
           instruction ?? (scope == AiAgentScope.selection ? '解释这段内容' : null),
       sourceProvider: (scope) => readAiAgentSource(_markdrawController, scope),

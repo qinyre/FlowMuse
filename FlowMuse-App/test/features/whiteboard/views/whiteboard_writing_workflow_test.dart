@@ -210,6 +210,116 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('助手锁定新选区的文字，保留草稿与已发送消息', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-auto-selection'),
+    ))!;
+    final requests = <Object?>[];
+    final firstReply = Completer<NativeHttpResponse>();
+    const reply = NativeHttpResponse(
+      statusCode: 200,
+      body: '{"choices":[{"message":{"content":"测试回复"}}]}',
+    );
+    final controller = await _open(
+      tester,
+      _container(
+        library: library,
+        assistant: AiAgentRepository(
+          config: const AiAgentConfig(
+            baseUrl: 'https://example.com/v1',
+            apiKey: 'test-key',
+            model: 'test-model',
+          ),
+          post:
+              ({
+                required url,
+                headers = const {},
+                required body,
+                connectTimeoutMs = 8000,
+                readTimeoutMs = 130000,
+                cancelToken,
+              }) async {
+                final messages = (jsonDecode(body) as Map)['messages'] as List;
+                requests.add((messages.last as Map)['content']);
+                return requests.length == 1 ? firstReply.future : reply;
+              },
+        ),
+      ),
+      note,
+    );
+    const first = ElementId('first-text');
+    const second = ElementId('second-text');
+    const shape = ElementId('other-shape');
+    controller.setLayout(const CanvasLayout(type: CanvasLayoutType.unbounded));
+    controller.loadScene(
+      Scene().upsertRemoteElements([
+        TextElement(
+          id: first,
+          x: 180,
+          y: 180,
+          width: 120,
+          height: 40,
+          text: '第一段样例',
+          fontFamily: 'Excalifont',
+        ),
+        TextElement(
+          id: second,
+          x: 180,
+          y: 320,
+          width: 120,
+          height: 40,
+          text: '第二段样例',
+          fontFamily: 'Excalifont',
+        ),
+        RectangleElement(id: shape, x: 330, y: 180, width: 50, height: 40),
+      ]),
+    );
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    final chip = find.widgetWithText(InputChip, '当前文字选区');
+    final composer = find.byType(TextField);
+    expect(chip, findsNothing);
+    await tester.enterText(composer, '请解释');
+    controller.applyResult(SetSelectionResult({first, shape}));
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(requests, isEmpty);
+    controller.applyResult(SetSelectionResult({shape}));
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(tester.widget<TextField>(composer).controller!.text, '请解释');
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(requests.single, isA<String>());
+    expect(requests.single, contains('第一段样例'));
+    expect(requests.single, isNot(contains('第二段样例')));
+
+    controller.applyResult(SetSelectionResult({second}));
+    controller.applyResult(SetSelectionResult({}));
+    firstReply.complete(reply);
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(find.text('测试回复', findRichText: true), findsOneWidget);
+    await tester.enterText(composer, '继续解释');
+    await tester.pump();
+    await tester.tap(find.byTooltip('追问修改'));
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(2));
+    expect(requests.last, contains('第二段样例'));
+    expect(requests.last, isNot(contains('第一段样例')));
+    await tester.tap(find.byTooltip('移除笔记来源'));
+    await tester.pumpAndSettle();
+    controller.setViewport(const ViewportState(zoom: 1.1));
+    await tester.pumpAndSettle();
+    expect(chip, findsNothing);
+    await tester.tap(find.byTooltip('收起AI笔记助手'));
+    controller.applyResult(SetSelectionResult({first}));
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    expect(chip, findsNothing);
+  });
+
   testWidgets('从 AI 回复点击引用可定位原文并返回同一回复', (tester) async {
     final note = (await tester.runAsync(
       () => library.createNote(title: 'ai-source-return'),
