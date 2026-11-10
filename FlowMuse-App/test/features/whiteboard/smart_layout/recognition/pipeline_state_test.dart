@@ -147,8 +147,8 @@ void main() {
     expect(result.ledger.entryOf('s1').reason, SourcePreserveReason.uncertain);
   });
 
-  for (final verifyFails in [false, true]) {
-    test('高置信小字独立重读，不携带初读文本，失败=$verifyFails', () async {
+  for (final mode in ['首次确认', '初读漏答', '复核漏答', '复核不确定', '补读低置信']) {
+    test('高置信小字独立重读和漏识别补救（$mode）', () async {
       var scene = Scene();
       final partitions = <RegionPartition>[];
       for (var row = 0; row < 5; row++) {
@@ -177,19 +177,38 @@ void main() {
           ),
         );
       }
+      var verifies = 0;
       final transport = FakeRecognitionTransport(
         responder: (body) async {
           final req = jsonDecode(body) as Map<String, Object?>;
           if (req['stage'] == 'verify') {
-            if (verifyFails) {
-              return (504, errorEnvelopeJson('providerTimeout', '超时', true));
+            verifies++;
+            if (verifies == 1 && (mode == '复核漏答' || mode == '补读低置信')) {
+              return buildBatchResponseBody(req, missingRegionIds: {'r:row-4'});
             }
-            return buildBatchResponseBody(req, textOf: (_) => '复核正文');
+            if (verifies == 1 && mode == '复核不确定') {
+              return buildBatchResponseBody(
+                req,
+                textOf: (_) => '不完整',
+                statusOf: (_) => 'uncertain',
+              );
+            }
+            return buildBatchResponseBody(
+              req,
+              textOf: (_) => '复核正文',
+              confidence: mode == '补读低置信' ? .7 : .95,
+            );
           }
+          final omitted =
+              mode == '初读漏答' &&
+              (req['regions'] as List).any(
+                (region) => region['regionId'] == 'r:row-4',
+              );
           return buildBatchResponseBody(
             req,
             confidence: .99,
             textOf: (_) => '初读正文',
+            missingRegionIds: omitted ? {'r:row-4'} : null,
           );
         },
       );
@@ -200,11 +219,26 @@ void main() {
           structureInput = input;
         }),
       ).run(captureOf(scene), correctedPartitions: partitions);
-      final request = transport.decodedBodies('verify').single;
-      final region = (request['regions'] as List).single as Map;
-      expect(region['regionId'], 'r:row-4');
-      expect(region.containsKey('originalText'), isFalse);
-      expect(region.containsKey('originalConfidence'), isFalse);
+      expect(transport.decodedBodies('read'), hasLength(2));
+      expect(verifies, mode == '首次确认' || mode == '初读漏答' ? 1 : 2);
+      for (final request in transport.decodedBodies('verify')) {
+        final region = (request['regions'] as List).single as Map;
+        expect(region['regionId'], 'r:row-4');
+        expect(region.containsKey('originalText'), isFalse);
+        expect(region.containsKey('originalConfidence'), isFalse);
+      }
+      if (mode != '首次确认') {
+        final recovery = transport.decodedBodies('verify').last;
+        expect(
+          (recovery['regions'] as List).single['reason'],
+          'coverageRecovery',
+        );
+        expect(
+          transport.requests.last.readTimeoutMs,
+          inInclusiveRange(9000, 10000),
+        );
+      }
+      final verifyFails = mode == '补读低置信';
       expect(result.regionOutcomes['r:row-4']?.verified, !verifyFails);
       expect(
         structureInput!.regionOutcomes.containsKey('r:row-4'),
@@ -216,6 +250,12 @@ void main() {
       );
       if (!verifyFails) {
         expect(result.regionOutcomes['r:row-4']?.text, '复核正文');
+        expect(result.partial, isFalse);
+      } else {
+        expect(
+          result.ledger.entryOf('row-4-0').reason,
+          SourcePreserveReason.missingResponse,
+        );
       }
     });
   }

@@ -330,6 +330,7 @@ class RecognitionPipeline {
   bool _cancelRequested = false;
   final _activeRequests = <SmartLayoutCancellationToken>{};
   static const _verifyTimeLimit = Duration(seconds: 35);
+  static const _coverageRecoveryTimeLimit = Duration(seconds: 10);
   static const _structureTimeLimit = Duration(seconds: 45);
   RecognitionBudget _budget = const RecognitionBudget();
   final Stopwatch _clock = Stopwatch();
@@ -821,13 +822,92 @@ class RecognitionPipeline {
       }
     }
 
+    // 漏答和未确认的文字行先独立补读，账本保持 pending 直到结果确认。
+    final recoverySlots = math.min(
+      concurrency,
+      _budget.modelCallsRemaining - 1,
+    );
+    if (recoverySlots > 0 && !_budgetExpired) {
+      final recovery = _effectivePartitions
+          .where((partition) {
+            final record = partition.record;
+            final id = record.regionId;
+            final outcome = _outcomes[id];
+            return !reusedRegionIds.contains(id) &&
+                outcome != null &&
+                !_isVerifiedText(outcome) &&
+                (_deferredMissingIds.contains(id) ||
+                    outcome.status == RecognitionRegionStatus.uncertain ||
+                    outcome.status == RecognitionRegionStatus.unreadable ||
+                    (outcome.status == RecognitionRegionStatus.recognized &&
+                        _verifyReasons.containsKey(id))) &&
+                record.targetSourceIds.every(
+                  (sourceId) =>
+                      ledger.entryOf(sourceId).status ==
+                      SourceLedgerStatus.pending,
+                ) &&
+                _looksLikeRecoveryText(partition);
+          })
+          .take(recoverySlots.toInt())
+          .toList();
+      if (recovery.isNotEmpty) {
+        _checkCancelled();
+        if (_state != RecognitionPipelineState.verifying) {
+          _transition(RecognitionPipelineState.verifying);
+        }
+        final deadline = stopwatch.elapsed + _coverageRecoveryTimeLimit;
+        final responses = await Future.wait([
+          for (final partition in recovery)
+            _dispatch(
+              capture,
+              [partition],
+              stopwatch: stopwatch,
+              bearerToken: bearerToken,
+              verify: true,
+              coverageRecovery: true,
+              stageDeadline: deadline,
+            ),
+        ]);
+        _checkCancelled();
+        for (var i = 0; i < recovery.length; i++) {
+          final response = responses[i];
+          if (response is! RecognitionBatchResponse) continue;
+          final region = response.regions.singleOrNull;
+          if (region == null ||
+              region.status != RecognitionRegionStatus.recognized ||
+              (region.confidence ?? 0) <
+                  math.max(.8, verifyConfidenceThreshold) ||
+              (region.text ?? '').trim().isEmpty) {
+            continue;
+          }
+          _deferredMissingIds.remove(region.regionId);
+          _applyBatchResponse(
+            [recovery[i]],
+            response,
+            ledger,
+            partialNotes,
+            verified: true,
+          );
+          ledger = _ledgerAfterBatch;
+        }
+      }
+    }
+    for (final partition in _effectivePartitions) {
+      final id = partition.record.regionId;
+      if (!_deferredMissingIds.contains(id)) continue;
+      for (final sourceId in partition.record.targetSourceIds) {
+        ledger = ledger.preserve(
+          sourceId,
+          SourcePreserveReason.missingResponse,
+        );
+      }
+      partialNotes.add('漏答保留: $id');
+    }
+
     // 疑难区域只有成功复核后才可准入；预算截断/复核失败不得沿用低置信初读。
     final confirmed = <String>{
       for (final o in _outcomes.values)
-        if (o.verified &&
-            o.status == RecognitionRegionStatus.recognized &&
-            (o.confidence ?? 0) >= verifyConfidenceThreshold)
-          ...o.targetSourceIds,
+        if (_isVerifiedText(o)) ...o.targetSourceIds,
     };
     final nonTextSources = <String>{
       for (final o in _outcomes.values)
@@ -942,6 +1022,17 @@ class RecognitionPipeline {
   }
 
   SourceLedger _ledgerAfterBatch = SourceLedger.register(const []);
+  final _deferredMissingIds = <String>{};
+
+  bool _isVerifiedText(RegionReadOutcome outcome) =>
+      outcome.verified &&
+      outcome.status == RecognitionRegionStatus.recognized &&
+      (outcome.confidence ?? 0) >= verifyConfidenceThreshold;
+
+  bool _looksLikeRecoveryText(RegionPartition partition) =>
+      partition.strokes.length >= 8 &&
+      partition.record.bounds.width >= partition.record.bounds.height * 2 &&
+      !partition.isDrawingLike;
 
   Duration _remaining(Stopwatch stopwatch) {
     final remaining = _budget.remainingOf(stopwatch);
@@ -983,6 +1074,10 @@ class RecognitionPipeline {
             status: RecognitionRegionStatus.unreadable,
             targetSourceIds: partition.record.targetSourceIds,
           );
+      if (_looksLikeRecoveryText(partition)) {
+        _deferredMissingIds.add(missingId);
+        continue;
+      }
       for (final sourceId in partition.record.targetSourceIds) {
         next = next.preserve(sourceId, SourcePreserveReason.missingResponse);
       }
@@ -1030,11 +1125,16 @@ class RecognitionPipeline {
     required Stopwatch stopwatch,
     String? bearerToken,
     bool verify = false,
+    bool coverageRecovery = false,
     Duration? stageDeadline,
   }) => _dispatchRequest(
-    _cacheKeyOf(capture, batch, verify),
+    _cacheKeyOf(capture, batch, verify) + (coverageRecovery ? '|coverage' : ''),
     () => verify
-        ? _buildVerifyRequest(capture, batch)
+        ? _buildVerifyRequest(
+            capture,
+            batch,
+            coverageRecovery: coverageRecovery,
+          )
         : _buildReadRequest(capture, batch),
     stopwatch: stopwatch,
     bearerToken: bearerToken,
@@ -1161,8 +1261,9 @@ class RecognitionPipeline {
 
   RecognitionVerifyRequest _buildVerifyRequest(
     RecognitionCapture capture,
-    List<RegionPartition> batch,
-  ) {
+    List<RegionPartition> batch, {
+    required bool coverageRecovery,
+  }) {
     return RecognitionVerifyRequest(
       operationId: capture.operationId,
       requestId: _requestIdFactory(),
@@ -1176,15 +1277,18 @@ class RecognitionPipeline {
             regionId: partition.record.regionId,
             imagePngBase64: _base64Of(partition),
             imageScale: _assetByRegion[partition.record.regionId]!.scale,
-            reason:
-                _verifyReasons[partition.record.regionId] ??
-                RecognitionVerifyReason.lowConfidence,
+            reason: coverageRecovery
+                ? RecognitionVerifyReason.coverageRecovery
+                : _verifyReasons[partition.record.regionId] ??
+                      RecognitionVerifyReason.lowConfidence,
             originalText:
-                _independentVerifyIds.contains(partition.record.regionId)
+                coverageRecovery ||
+                    _independentVerifyIds.contains(partition.record.regionId)
                 ? null
                 : _outcomes[partition.record.regionId]?.text,
             originalConfidence:
-                _independentVerifyIds.contains(partition.record.regionId)
+                coverageRecovery ||
+                    _independentVerifyIds.contains(partition.record.regionId)
                 ? null
                 : _outcomes[partition.record.regionId]?.confidence,
           ),
