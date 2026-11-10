@@ -111,7 +111,15 @@ class SelectTool implements Tool {
       return true;
     }
     final hit = _selectableElementAtPoint(point, context);
-    return hit != null && !hit.locked && context.selectedIds.contains(hit.id);
+    if (hit != null) {
+      return !hit.locked && context.selectedIds.contains(hit.id);
+    }
+    return _selectionBoundsDragTarget(
+          point,
+          selectedElements,
+          context.interactionMode,
+        ) !=
+        null;
   }
 
   /// True when the user is actively dragging a point or segment handle.
@@ -257,6 +265,13 @@ class SelectTool implements Tool {
 
       // If we haven't committed to a mode yet, determine it now
       if (_dragMode == _DragMode.none) {
+        // Resolve blank selection space only after the drag threshold so taps
+        // still deselect and actual element/handle hits keep priority.
+        _hitElement ??= _selectionBoundsDragTarget(
+          down,
+          _getSelectedElements(context),
+          context.interactionMode,
+        );
         if (_hitElement == null) {
           _dragMode = _DragMode.marquee;
         } else if (_hitElement!.locked) {
@@ -2119,6 +2134,23 @@ class SelectTool implements Tool {
     return context.scene.activeElements
         .where((e) => context.selectedIds.contains(e.id))
         .toList();
+  }
+
+  Element? _selectionBoundsDragTarget(
+    Point point,
+    List<Element> elements,
+    InteractionMode mode,
+  ) {
+    if (elements.length < 2 || elements.any((e) => e.locked)) return null;
+    final bounds = SelectionOverlay.fromElements(elements, mode: mode)!.bounds;
+    final padding = selectionPaddingFor(mode);
+    final selectionBounds = Bounds.fromLTWH(
+      bounds.left - padding,
+      bounds.top - padding,
+      bounds.size.width + padding * 2,
+      bounds.size.height + padding * 2,
+    );
+    return selectionBounds.containsPoint(point) ? elements.first : null;
   }
 
   Element? _selectableElementAtPoint(Point point, ToolContext context) =>
