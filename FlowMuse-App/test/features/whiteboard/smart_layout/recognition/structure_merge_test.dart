@@ -151,14 +151,26 @@ void main() {
     );
   });
 
-  test('多段正文也触发整页理解，失败仍保留本地正文角色', () async {
-    final result = await recoverWithRegions(const [
-      RegionSpec(regionId: 'r:a', top: 100, left: 0, text: '普通正文'),
-      RegionSpec(regionId: 'r:b', top: 130, left: 0, text: '另一段正文'),
-    ], send: (request) async => null);
-    expect(result.usedModel, isTrue);
-    expect(result.roles.values, everyElement('body'));
-  });
+  for (final (label, second) in [
+    ('较长正文', RegionSpec(regionId: 'r:b', top: 130, left: 0, text: '正文' * 24)),
+    (
+      '分栏短文',
+      const RegionSpec(regionId: 'r:b', top: 100, left: 240, text: '并排说明'),
+    ),
+    (
+      '上下距离较远的短文',
+      const RegionSpec(regionId: 'r:b', top: 200, left: 0, text: '独立说明'),
+    ),
+  ]) {
+    test('$label仍请求整页理解，失败时保留本地正文角色', () async {
+      final result = await recoverWithRegions([
+        const RegionSpec(regionId: 'r:a', top: 100, left: 0, text: '普通正文'),
+        second,
+      ], send: (request) async => null);
+      expect(result.usedModel, isTrue);
+      expect(result.roles.values, everyElement('body'));
+    });
+  }
 
   test('模型结果被拒（send 返回 null）：回退本地保守结构并记警告', () async {
     final result = await recoverWithRegions([

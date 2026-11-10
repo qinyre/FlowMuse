@@ -425,7 +425,10 @@ Map<String, Object?> buildAiAgentRequestBody({
 
 final aiAgentRepositoryProvider = Provider<AiAgentRepository>((ref) {
   return AiAgentRepository(
-    readSearchToken: ref.watch(accountRepositoryProvider).readToken,
+    readSearchToken: () async {
+      final account = ref.read(accountViewModelProvider);
+      return account.isAuthenticated ? account.token : null;
+    },
   );
 });
 

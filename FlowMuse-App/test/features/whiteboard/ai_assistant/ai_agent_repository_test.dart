@@ -3,12 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flow_muse/features/account/models/account_user.dart';
+import 'package:flow_muse/features/account/view_models/account_view_model.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_presets.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 1×1 基准 PNG（含魔数，可跨过发送前的结构化校验）。
@@ -76,7 +81,84 @@ final _webSearchDefinition = predicate<Map>(
   (tool) => tool['function']?['name'] == 'web_search',
 );
 
+class _SearchAccount extends AccountViewModel {
+  @override
+  AccountState build() => const AccountState(
+    status: AccountStatus.authenticated,
+    user: AccountUser(id: 'test-user', email: '', displayName: 'Test'),
+    token: 'active-session',
+  );
+
+  @override
+  Future<void> logout() async {
+    state = const AccountState(status: AccountStatus.guest);
+  }
+}
+
 void main() {
+  test('联网搜索使用当前会话，退出后停止发送检索请求', () async {
+    final previousHttpOverride = HttpOverrides.current;
+    TestWidgetsFlutterBinding.ensureInitialized();
+    HttpOverrides.global = null;
+    addTearDown(() => HttpOverrides.global = previousHttpOverride);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final baseUrl = 'http://127.0.0.1:${server.port}';
+    dotenv.loadFromString(envString: 'FLOWMUSE_COLLAB_SERVER_URL=$baseUrl');
+    addTearDown(dotenv.clean);
+    FlutterSecureStorage.setMockInitialValues({});
+    await defaultAiAgentConfigStore.write(
+      AiAgentConfig(baseUrl: baseUrl, apiKey: 'model-key', model: 'test-model'),
+    );
+    final searchTokens = <String?>[];
+    server.listen((request) async {
+      final body = jsonDecode(await utf8.decoder.bind(request).join());
+      final response = request.response;
+      response.headers.contentType = ContentType.json;
+      if (request.uri.path == '/api/assistant/web-search') {
+        searchTokens.add(request.headers.value('Authorization'));
+        response.write(
+          '[{"title":"参考","url":"https://example.test","snippet":"摘要"}]',
+        );
+      } else if ((body['tools'] as List).any(
+        (tool) => tool['function']['name'] == 'web_search',
+      )) {
+        response.write(
+          '{"choices":[{"message":{"tool_calls":[{"function":'
+          '{"name":"web_search","arguments":{"query":"公开资料"}}}]}}]}',
+        );
+      } else {
+        response.write('{"choices":[{"message":{"content":"回答"}}]}');
+      }
+      await response.close();
+    });
+    final container = ProviderContainer(
+      overrides: [accountViewModelProvider.overrideWith(_SearchAccount.new)],
+    );
+    addTearDown(container.dispose);
+    final repository = container.read(aiAgentRepositoryProvider);
+    Future<AiAgentResponse> search() => repository.run(
+      instruction: '查找公开资料',
+      noteTitle: '',
+      texts: const [],
+      allowWebSearch: true,
+    );
+    expect((await search()).webSources, hasLength(1));
+    expect(searchTokens, ['Bearer active-session']);
+    await container.read(accountViewModelProvider.notifier).logout();
+    await expectLater(
+      search(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          '请登录 FlowMuse 后查资料',
+        ),
+      ),
+    );
+    expect(searchTokens, ['Bearer active-session']);
+  });
+
   test('HTTP 流式正文在响应关闭前交给助手', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
