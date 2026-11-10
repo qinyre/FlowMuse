@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show kIsWeb, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -1896,6 +1896,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _temporarySaved = true;
   }
 
+  Future<void> _saveDrawingAs() async {
+    try {
+      final saved = await _fileHandler.saveAs();
+      if (!mounted || !saved || kIsWeb) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已保存绘图副本')));
+    } catch (error) {
+      debugPrint('[FlowMuseSaveAs] ${error.runtimeType}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('另存为失败，请重试')));
+    }
+  }
+
   Future<void> _openExternalSceneAsLocalNote() async {
     await _fileHandler.open();
     if (!mounted) {
@@ -3009,7 +3025,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       unawaited(_flushLocalDraftInBackground());
                     },
                     onSaveAs: () {
-                      unawaited(_fileHandler.saveAs());
+                      unawaited(_saveDrawingAs());
                     },
                     onOpen: widget.temporaryCollaboration
                         ? null
