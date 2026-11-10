@@ -29,6 +29,7 @@ class EditorCanvas extends StatefulWidget {
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onUserInteraction;
+  final VoidCallback? onBlankTap;
   final RemoteWetInkStore? remoteWetInkStore;
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
@@ -50,6 +51,7 @@ class EditorCanvas extends StatefulWidget {
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onUserInteraction,
+    this.onBlankTap,
     this.remoteWetInkStore,
     this.attributionActionResolver,
     this.selectionActions = const {},
@@ -74,6 +76,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   final Set<int> _activePagedPanPointers = {};
   final Set<int> _touchPointers = {};
   bool _multiTouch = false;
+  (PointerDownEvent, EditorState)? _blankTap;
   int? _pagedScrollPointer;
   Offset? _pagedPanStartPosition;
   bool _pagedPanMoved = false;
@@ -106,6 +109,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   void didUpdateWidget(EditorCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != controller) {
+      _blankTap = null;
       _onTextRecoveryChanged(false);
       _appendPageWheelTimer?.cancel();
       _appendPageWheelTimer = null;
@@ -179,6 +183,51 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   bool _isPagedPanPointer(PointerEvent event) =>
       _activePagedPanPointers.contains(event.pointer);
+
+  void _beginBlankTap(PointerDownEvent event) {
+    _blankTap = null;
+    if (widget.onBlankTap == null ||
+        event.buttons != kPrimaryButton ||
+        _touchPointers.isNotEmpty ||
+        controller.pageNavigationBusy) {
+      return;
+    }
+    _blankTap = (event, controller.editorState);
+  }
+
+  void _updateBlankTap(PointerMoveEvent event) {
+    final candidate = _blankTap;
+    if (candidate == null) return;
+    if (event.pointer != candidate.$1.pointer ||
+        (event.localPosition - candidate.$1.localPosition).distance >
+            computeHitSlop(event.kind, MediaQuery.gestureSettingsOf(context)) ||
+        controller.activeTool.overlay?.marqueeRect != null) {
+      _blankTap = null;
+    }
+  }
+
+  void _finishBlankTap(PointerUpEvent event) {
+    final candidate = _blankTap;
+    _blankTap = null;
+    if (candidate == null) return;
+    final (down, before) = candidate;
+    final after = controller.editorState;
+    // Observe only after normal dispatch so ink dots and tool clicks keep priority.
+    if (event.pointer != down.pointer ||
+        event.timeStamp - down.timeStamp > kLongPressTimeout ||
+        (event.localPosition - down.localPosition).distance >
+            computeHitSlop(event.kind, MediaQuery.gestureSettingsOf(context)) ||
+        !identical(before.scene, after.scene) ||
+        before.viewport != after.viewport ||
+        before.activeToolType != after.activeToolType ||
+        after.selectedIds.isNotEmpty ||
+        controller.activeTool.overlay != null ||
+        after.scene.getElementAtPoint(controller.toScene(down.localPosition)) !=
+            null) {
+      return;
+    }
+    widget.onBlankTap?.call();
+  }
 
   // Raw pointer moves arrive before the scale recognizer. Stop single-finger
   // editing as soon as a second finger lands, and wait for all fingers to lift.
@@ -664,6 +713,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerDown: (event) {
+                      _beginBlankTap(event);
                       widget.onUserInteraction?.call();
                       _cancelWheelAppend();
                       if (_beginTouch(event)) return;
@@ -688,6 +738,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       }
                       if (_isPagedPanPointer(event)) {
                         _updatePagedPan(event);
+                        _updateBlankTap(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
                           true,
@@ -695,6 +746,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         return;
                       }
                       controller.onPointerMove(event);
+                      _updateBlankTap(event);
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
@@ -704,6 +756,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                           controller.onPointerUp(event);
                         }
                         _endPagedPan(event);
+                        _finishBlankTap(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
                           false,
@@ -712,6 +765,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         return;
                       }
                       controller.onPointerUp(event);
+                      _finishBlankTap(event);
                       widget.onPointerPresence?.call(
                         event.localPosition,
                         false,
@@ -719,6 +773,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },
                     onPointerCancel: (event) {
+                      _blankTap = null;
                       if (_endTouch(event)) return;
                       if (_isPagedPanPointer(event)) {
                         if (event.kind == PointerDeviceKind.mouse) {
@@ -734,6 +789,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerSignal: (event) {
+                      _blankTap = null;
                       widget.onUserInteraction?.call();
                       _onPointerSignal(event);
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
