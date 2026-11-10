@@ -248,12 +248,18 @@ class _EditorCanvasState extends State<EditorCanvas>
     }
 
     final scrollDelta = controller.layout.isRightToLeft ? delta.dx : -delta.dy;
-    if (!_applyPagedOverscroll(scrollDelta)) {
-      if (event.kind == PointerDeviceKind.mouse) {
-        controller.onPointerMove(event);
-      } else {
-        controller.scrollPagedViewportBy(scrollDelta);
-      }
+    final overscrolling = _applyPagedOverscroll(scrollDelta);
+    if (overscrolling) {
+      delta = controller.layout.isRightToLeft
+          ? Offset(0, delta.dy)
+          : Offset(delta.dx, 0);
+    }
+    if (event.kind == PointerDeviceKind.mouse && !overscrolling) {
+      controller.onPointerMove(event);
+    } else {
+      controller.applyResult(
+        UpdateViewportResult(controller.editorState.viewport.pan(delta)),
+      );
     }
     widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
   }
@@ -327,11 +333,26 @@ class _EditorCanvasState extends State<EditorCanvas>
       controller.onPointerSignal(event);
       return;
     }
-    final delta = event.scrollDelta.dy;
-    if (!delta.isFinite || delta == 0) return;
+    final scroll = event.scrollDelta;
+    if (!scroll.dx.isFinite || !scroll.dy.isFinite) return;
+    final delta = controller.layout.isRightToLeft && scroll.dx != 0
+        ? -scroll.dx
+        : scroll.dy;
+    if (delta == 0) {
+      _cancelWheelAppend();
+      controller.onPointerSignal(event);
+      return;
+    }
     _appendPageWheelTimer?.cancel();
     _appendPageOverscrollController.stop();
-    if (!_applyPagedOverscroll(delta)) {
+    if (_applyPagedOverscroll(delta)) {
+      final crossScroll = controller.layout.isRightToLeft
+          ? Offset(0, scroll.dx == 0 ? 0 : scroll.dy)
+          : Offset(scroll.dx, 0);
+      controller.applyResult(
+        UpdateViewportResult(controller.editorState.viewport.pan(-crossScroll)),
+      );
+    } else {
       controller.onPointerSignal(event);
     }
     if (_appendPageOverscroll <= 0) {
