@@ -999,6 +999,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                         remoteWetInkStore: widget.remoteWetInkStore,
                         onPointerPresence: widget.onPointerPresence,
                         onUserInteraction: widget.onCanvasInteraction,
+                        onBlankTap: showProperties && !_propertyPanelCollapsed
+                            ? _collapsePropertyPanel
+                            : null,
                         onVisibleSceneBoundsChanged:
                             widget.onVisibleSceneBoundsChanged,
                         attributionActionResolver:
