@@ -353,4 +353,6 @@ extension FlowMuseElementData on flow.Element {
 
   bool get isCanvasPage => flowMuseData?['role'] == 'page';
   bool get isPdfBackground => flowMuseData?['pdfBackground'] == true;
+  bool get isForegroundImage =>
+      this is flow.ImageElement && !isPdfBackground && !isCanvasPage;
 }

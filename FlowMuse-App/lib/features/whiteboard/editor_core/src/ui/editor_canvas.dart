@@ -583,6 +583,48 @@ class _EditorCanvasState extends State<EditorCanvas>
               child: wetInkLayers,
             );
           }
+          final scene = controller.editorState.scene;
+          final resolvedImages = controller.resolveImages(
+            viewport: paintViewport,
+            canvasSize: canvasSize,
+          );
+          final hasForegroundImages = scene.foregroundImages.isNotEmpty;
+          final mathText = _MathTextOverlay(
+            controller: controller,
+            viewport: paintViewport,
+            focusedCreatorKey: widget.focusedCreatorKey,
+            focusHistoricalContent: widget.focusHistoricalContent,
+            highlightedElementIds: immutableHighlightIds,
+          );
+          if (hasForegroundImages) {
+            wetInkLayers = Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                wetInkLayers,
+                mathText,
+                IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: StaticCanvasPainter(
+                        pass: ScenePaintPass.foregroundImages,
+                        scene: scene,
+                        adapter: controller.adapter,
+                        viewport: paintViewport,
+                        layout: controller.layout,
+                        contentBounds: controller.contentBounds,
+                        resolvedImages: resolvedImages,
+                        focusedCreatorKey: widget.focusedCreatorKey,
+                        focusHistoricalContent: widget.focusHistoricalContent,
+                        locallyHighlightedElementIds: immutableHighlightIds,
+                        localHighlightRevision: _localHighlightRevision,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
           return MouseRegion(
             cursor: controller.cursorForTool,
             onExit: (_) => controller.onPointerExit(),
@@ -680,16 +722,16 @@ class _EditorCanvasState extends State<EditorCanvas>
                         renderCache: useLayeredWetInk
                             ? _staticCanvasCache
                             : null,
-                        scene: controller.editorState.scene,
+                        pass: hasForegroundImages
+                            ? ScenePaintPass.content
+                            : ScenePaintPass.all,
+                        scene: scene,
                         adapter: controller.adapter,
                         viewport: paintViewport,
                         layout: controller.layout,
                         previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
-                        resolvedImages: controller.resolveImages(
-                          viewport: paintViewport,
-                          canvasSize: canvasSize,
-                        ),
+                        resolvedImages: resolvedImages,
                         pendingElements:
                             controller.pendingPreviewElements.isNotEmpty
                             ? controller.pendingPreviewElements
@@ -782,13 +824,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                     onRecoveryChanged: _onTextRecoveryChanged,
                     child: TextEditingOverlay(controller: controller),
                   ),
-                _MathTextOverlay(
-                  controller: controller,
-                  viewport: paintViewport,
-                  focusedCreatorKey: widget.focusedCreatorKey,
-                  focusHistoricalContent: widget.focusHistoricalContent,
-                  highlightedElementIds: immutableHighlightIds,
-                ),
+                if (!hasForegroundImages) mathText,
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
                 // Compact property panel trigger

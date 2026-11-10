@@ -33,21 +33,25 @@ class PagedAppendPageHint {
   final bool fromScrollWheel;
 }
 
+enum ScenePaintPass { all, content, foregroundImages }
+
 /// A [CustomPainter] that renders all active scene elements with a
 /// hand-drawn aesthetic via [RoughAdapter].
 ///
-/// Elements are drawn in fractional-index order. Deleted elements,
+/// Elements are drawn in fractional-index order within each canvas layer.
+/// Deleted elements,
 /// bound text (containerId != null), and off-screen elements are skipped
 /// via [cullElements]. Viewport pan/zoom transforms are applied to the
 /// canvas before rendering.
 ///
-/// An optional [previewElement] is rendered last, for live creation preview.
+/// An optional [previewElement] is rendered above content and under images.
 class StaticCanvasPainter extends CustomPainter {
   final Scene scene;
   final RoughAdapter adapter;
   final ViewportState viewport;
   final CanvasLayout? layout;
   final Element? previewElement;
+  final ScenePaintPass pass;
 
   /// When set, the text element with this ID is not rendered — the editing
   /// overlay is shown instead.
@@ -55,6 +59,7 @@ class StaticCanvasPainter extends CustomPainter {
 
   /// Decoded images keyed by fileId, passed through to ElementRenderer.
   final Map<String, ui.Image>? resolvedImages;
+  final Set<ElementId>? visibleElementIds;
 
   /// Pending flowchart elements rendered at 50% opacity as a preview.
   final List<Element>? pendingElements;
@@ -94,8 +99,10 @@ class StaticCanvasPainter extends CustomPainter {
     required this.viewport,
     this.layout,
     this.previewElement,
+    this.pass = ScenePaintPass.all,
     this.editingElementId,
     this.resolvedImages,
+    this.visibleElementIds,
     this.pendingElements,
     this.gridSize,
     this.isDarkBackground = false,
@@ -145,6 +152,7 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
 
+    final drawsContent = pass != ScenePaintPass.foregroundImages;
     // Render pages BEFORE clip — so page shadows extend freely on all sides.
     final pagedLayout = layout;
     if (pagedLayout != null && pagedLayout.isPaged) {
@@ -155,9 +163,11 @@ class StaticCanvasPainter extends CustomPainter {
       final visiblePages = pagedLayout.pages
           .where((page) => page.bounds.overlaps(visible))
           .toList();
-      _renderPages(canvas, visiblePages);
-      if (appendPageHint != null) {
-        _renderAppendPageHint(canvas, appendPageHint!);
+      if (drawsContent) {
+        _renderPages(canvas, visiblePages);
+        if (appendPageHint != null) {
+          _renderAppendPageHint(canvas, appendPageHint!);
+        }
       }
       if (pagedLayout.pages.isNotEmpty) {
         final pageClip = Path();
@@ -180,18 +190,26 @@ class StaticCanvasPainter extends CustomPainter {
       );
     }
 
-    // Render grid behind elements
-    if (gridSize != null) {
-      _renderGrid(canvas, size, gridSize!);
+    if (drawsContent) {
+      if (gridSize != null) _renderGrid(canvas, size, gridSize!);
+      _paintElements(canvas, size, scene.canvasContentElements);
+      _paintPreviews(canvas);
     }
+    if (pass != ScenePaintPass.content && scene.foregroundImages.isNotEmpty) {
+      _paintElements(canvas, size, scene.foregroundImages);
+    }
+    canvas.restore();
+  }
 
-    final visible = cullElements(scene.orderedElements, viewport, size);
-    // v4 §7.2：原 z 序单遍绘制，非目标元素按连续区段以 0.22 合成。
+  void _paintElements(Canvas canvas, Size size, List<Element> elements) {
+    final visible = cullElements(elements, viewport, size);
+    // 非目标元素在各自图层内按连续区段以 0.22 合成。
     final focusActive = focusedCreatorKey != null || focusHistoricalContent;
     var dimOpen = false;
     final dimPaint = Paint()..color = const Color.fromRGBO(255, 255, 255, 0.22);
 
     for (final element in visible) {
+      if (visibleElementIds?.contains(element.id) == false) continue;
       if (element.isCanvasPage) {
         continue; // 页底在循环前绘制，不参与 dim 机制
       }
@@ -272,8 +290,9 @@ class StaticCanvasPainter extends CustomPainter {
     if (dimOpen) {
       canvas.restore();
     }
+  }
 
-    // Render live creation preview on top
+  void _paintPreviews(Canvas canvas) {
     if (previewElement != null) {
       ElementRenderer.render(
         canvas,
@@ -307,8 +326,6 @@ class StaticCanvasPainter extends CustomPainter {
       }
       canvas.restore();
     }
-
-    canvas.restore();
   }
 
   /// Finds a frame element by its ID value.
@@ -811,6 +828,7 @@ class StaticCanvasPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) {
     return !identical(scene, oldDelegate.scene) ||
+        pass != oldDelegate.pass ||
         !identical(adapter, oldDelegate.adapter) ||
         viewport != oldDelegate.viewport ||
         contentBounds != oldDelegate.contentBounds ||
@@ -818,6 +836,7 @@ class StaticCanvasPainter extends CustomPainter {
         !identical(previewElement, oldDelegate.previewElement) ||
         !identical(pendingElements, oldDelegate.pendingElements) ||
         !mapEquals(resolvedImages, oldDelegate.resolvedImages) ||
+        !setEquals(visibleElementIds, oldDelegate.visibleElementIds) ||
         editingElementId != oldDelegate.editingElementId ||
         gridSize != oldDelegate.gridSize ||
         isDarkBackground != oldDelegate.isDarkBackground ||

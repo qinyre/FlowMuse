@@ -46,7 +46,7 @@ class SvgExporter {
     }
 
     // Collect elements to render
-    final ordered = scene.orderedElements;
+    final ordered = scene.paintOrderedElements;
 
     // Emit clipPath definitions for frames
     final frames = ordered.where((e) => !e.isDeleted && e is FrameElement);

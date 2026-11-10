@@ -6034,16 +6034,34 @@ class MarkdrawController extends ChangeNotifier {
     int scale = 2,
     bool selectedOnly = true,
     bool embedMarkdraw = true,
-  }) {
+  }) async {
     final selectedIds = selectedOnly && _editorState.selectedIds.isNotEmpty
         ? _editorState.selectedIds
         : null;
+    final scene = sanitizeSceneForExternalExport(_editorState.scene);
+    final backgroundColor = parseColor(_canvasBackgroundColor);
+    if (scene.files.isNotEmpty) {
+      final bounds = ExportBounds.compute(scene, selectedIds: selectedIds);
+      if (bounds == null) return null;
+      final region = Rect.fromLTWH(
+        bounds.left,
+        bounds.top,
+        bounds.size.width,
+        bounds.size.height,
+      );
+      if (_imageFilesInRect(scene, region)
+          .keys.any((id) => !_imageCache.contains(id))) {
+        await prewarmRegionImages(region, scene: scene);
+        if (_disposed) return null;
+      }
+    }
     return PngExporter.export(
-      sanitizeSceneForExternalExport(_editorState.scene),
+      scene,
       _adapter,
       scale: scale,
-      backgroundColor: parseColor(_canvasBackgroundColor),
+      backgroundColor: backgroundColor,
       selectedIds: selectedIds,
+      resolvedImages: _peekResolvedImages(scene: scene),
       embedMarkdraw: embedMarkdraw,
     );
   }

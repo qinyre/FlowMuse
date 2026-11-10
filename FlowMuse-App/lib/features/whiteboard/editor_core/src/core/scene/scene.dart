@@ -46,6 +46,27 @@ class Scene {
     return sorted;
   }();
 
+  List<Element> get canvasContentElements => _canvasLayers.content;
+  List<Element> get foregroundImages => _canvasLayers.images;
+
+  late final List<Element> paintOrderedElements = foregroundImages.isEmpty
+      ? canvasContentElements
+      : List.unmodifiable([...canvasContentElements, ...foregroundImages]);
+
+  late final ({List<Element> content, List<Element> images}) _canvasLayers =
+      () {
+        final content = <Element>[];
+        final images = <Element>[];
+        for (final element in orderedElements) {
+          if (element.isDeleted) continue;
+          (element.isForegroundImage ? images : content).add(element);
+        }
+        return (
+          content: List<Element>.unmodifiable(content),
+          images: List<Element>.unmodifiable(images),
+        );
+      }();
+
   /// Returns a new scene with the element added.
   Scene addElement(Element element) {
     return Scene._([..._elements, element], files, smartLayout);
@@ -208,8 +229,8 @@ class Scene {
   static const double _lineHitThreshold = 8.0;
 
   Element? getElementAtPoint(Point point, {bool Function(Element)? where}) {
-    final ordered = orderedElements.where((e) => !e.isDeleted).toList();
-    // Iterate in reverse to find topmost (highest index) first.
+    final ordered = paintOrderedElements;
+    // Iterate in reverse paint order to find the visible top element.
     for (var i = ordered.length - 1; i >= 0; i--) {
       final e = ordered[i];
       if (e.isCanvasPage || e.isPdfBackground) continue;

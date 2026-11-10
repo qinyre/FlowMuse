@@ -24,6 +24,7 @@ class PngExporter {
     int scale = 1,
     Color? backgroundColor,
     Set<ElementId>? selectedIds,
+    Map<String, Image>? resolvedImages,
     bool embedMarkdraw = true,
   }) async {
     final bounds = ExportBounds.compute(scene, selectedIds: selectedIds);
@@ -53,6 +54,13 @@ class PngExporter {
       scene: scene,
       adapter: adapter,
       viewport: viewport,
+      resolvedImages: resolvedImages,
+      visibleElementIds: selectedIds == null
+          ? null
+          : ExportBounds.elementsForExport(
+              scene,
+              selectedIds,
+            ).map((element) => element.id).toSet(),
     );
 
     painter.paint(canvas, Size(width, height));

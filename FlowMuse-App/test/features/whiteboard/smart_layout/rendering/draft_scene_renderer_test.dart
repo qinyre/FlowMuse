@@ -47,7 +47,7 @@ void main() {
     expect(imageLayer.bounds.size.width, 20);
     expect(imageLayer.bounds.size.height, 20);
 
-    // z 序按 orderedElements。
+    // z 序与画布绘制一致。
     final kinds = snapshot.layers.map((l) => l.elementId).toList();
     expect(kinds, ['shape-1', 'text-1', 'img-1']);
   });
@@ -70,7 +70,7 @@ void main() {
     expect(layer.bounds.size.width, 20, reason: '元素仍在场景中，占位降级不删块');
   });
 
-  test('层级表只排序一次，不随源元素数反复访问排序 getter', () async {
+  test('绘制与层级表共用一次场景排序', () async {
     final scene = _CountingScene(buildTestScene());
     final renderer = DraftSceneRenderer();
     addTearDown(renderer.dispose);
@@ -81,7 +81,7 @@ void main() {
     );
     addTearDown(snapshot.dispose);
     expect(snapshot.layers, hasLength(3));
-    expect(scene.sortCalls, 2, reason: 'painter 一次、层级表一次；旧循环会额外调用 2N+1 次');
+    expect(scene.sortCalls, 1);
   });
 
   test('资源归零：连续渲染后活资源为 0；取消在途渲染零残留', () async {

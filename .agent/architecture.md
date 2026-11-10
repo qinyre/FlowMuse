@@ -73,7 +73,7 @@ FlowMuse 是以手写与画布为载体的跨平台协作笔记应用，系统�
 - 元素创建者存于 `customData.flowMuse.collaborationOwner`，是不可变的显示元数据；更新元素、普通编辑和 LWW 合并不得把最后编辑者当成创建者。
 - 登录用户的 `creatorKey` 跨房间稳定，游客 key 仅在同一房间会话内稳定；presence 中的可选 `creatorKey` 位于现有 AES-GCM 密文正文，服务端不解密、不新增事件。
 - 协作房主鉴权使用的 `ownerKey`/`ownerKeyHash` 与元素创建者 `creatorKey` 完全不同，不能互换或复用判断。
-- 聚焦是 `WhiteboardPage` 的纯本机视图状态，不进入 Scene、History、SQLite、快照或网络消息；渲染必须沿用全局 z 序，以连续 `saveLayer` 区段变淡，不得改成物理图层或两遍重排。
+- 聚焦是 `WhiteboardPage` 的纯本机视图状态，不进入 Scene、History、SQLite、快照或网络消息；画布内容与普通插图分别在各自的绘制层内沿 z 序以连续 `saveLayer` 区段变淡，聚焦本身不改变顺序。
 - PDF/分页底图、网格、光标、选择框、本地活动笔迹和正在编辑的 overlay 始终全亮；外部导出剥离 `collaborationOwner`，内部存储保留。
 
 ---
