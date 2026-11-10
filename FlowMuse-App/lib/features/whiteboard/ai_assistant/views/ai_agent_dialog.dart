@@ -37,7 +37,7 @@ enum _AiCaptureScene {
 }
 
 /// 生成期间的客户端可知阶段；真实分阶段需 Repository 进度回调，先以近似状态呈现。
-enum _AiGenerateStage { preparing, generating }
+enum _AiGenerateStage { preparing, searching, generating }
 
 Future<void> showAiAgentDialog({
   required BuildContext context,
@@ -146,7 +146,6 @@ typedef _AiPanelTurn = ({
 
 class _AiAgentPanelState extends State<AiAgentPanel> {
   final _instructionController = TextEditingController();
-  final _searchController = TextEditingController();
   bool _searchEnabled = false;
   Timer? _streamRefresh;
   String _streamPreview = '';
@@ -287,7 +286,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     unawaited(_speechSubscription?.cancel());
     if (_ownsSpeechService) unawaited(_speechService.dispose());
     _instructionController.dispose();
-    _searchController.dispose();
     _streamRefresh?.cancel();
     _instructionFocusNode.dispose();
     _messageScroll.dispose();
@@ -604,9 +602,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   Future<void> _generate() async {
     final instruction = _instructionController.text.trim();
-    final webQuery = _searchEnabled ? _searchController.text.trim() : null;
     if (instruction.isEmpty ||
-        webQuery == '' ||
         _loading ||
         _applying ||
         _speechState != SpeechRecognitionState.idle) {
@@ -657,7 +653,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         conversation: _conversation,
         attachments: attachments,
         cancelToken: cancelToken,
-        webQuery: webQuery,
+        allowWebSearch: _searchEnabled,
+        onWebSearch: () {
+          if (!mounted ||
+              generation != _generation ||
+              cancelToken.isCancelled) {
+            return;
+          }
+          _streamRefresh?.cancel();
+          _streamRefresh = null;
+          streamedText.clear();
+          setState(() {
+            _stage = _AiGenerateStage.searching;
+            _streamPreview = '';
+          });
+        },
         onText: (fragment) {
           if (!mounted ||
               !_loading ||
@@ -696,7 +706,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         attachments: attachments,
       );
       _instructionController.clear();
-      _searchController.clear();
       _revealInConversation(_latestMessageKey);
     } on NativeHttpCancelledException {
       // 用户主动取消，不显示为失败。
@@ -709,7 +718,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         setState(() {
           _loading = false;
           _pendingInstruction = null;
-          _searchEnabled = webQuery != null && _error != null;
           _streamPreview = _error == null ? '' : streamedText.toString();
         });
         _streamRefresh?.cancel();
@@ -943,7 +951,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _actionControllers.clear();
     _actionFocusNodes.clear();
     _instructionController.clear();
-    _searchController.clear();
     setState(() {
       _conversation = const [];
       _messages.clear();
@@ -1246,7 +1253,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     Text(
                       _stage == _AiGenerateStage.preparing
                           ? '正在准备上下文…'
-                          : _searchEnabled
+                          : _stage == _AiGenerateStage.searching
                           ? '正在查找资料并生成回复…'
                           : response != null
                           ? '正在根据追问修改…'
@@ -1858,18 +1865,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
             ),
           ),
           if (_searchEnabled)
-            KeyboardFocusRecoveryExclusion(
-              child: TextField(
-                controller: _searchController,
-                enabled: !_loading && !_applying,
-                maxLength: 200,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: '搜索关键词',
-                  helperText: '仅此关键词发送给网页搜索服务',
-                  counterText: '',
-                  isDense: true,
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+              child: Text(
+                '联网已开启 · 助手按需检索，搜索词可能来自问题或笔记来源',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
             ),
           const SizedBox(height: 6),
@@ -1958,7 +1960,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               const Spacer(),
               if (widget.sourceProvider != null)
                 IconButton(
-                  tooltip: _searchEnabled ? '关闭查资料' : '查资料',
+                  tooltip: _searchEnabled ? '关闭联网搜索' : '开启联网搜索',
                   isSelected: _searchEnabled,
                   onPressed: busy
                       ? null
@@ -1989,8 +1991,6 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ? _cancelGeneration
                     : _applying ||
                           instruction.isEmpty ||
-                          (_searchEnabled &&
-                              _searchController.text.trim().isEmpty) ||
                           _speechState != SpeechRecognitionState.idle
                     ? null
                     : _generate,

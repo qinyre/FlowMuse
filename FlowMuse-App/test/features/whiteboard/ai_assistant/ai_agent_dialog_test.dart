@@ -23,7 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final composer = find.byKey(const ValueKey('note-agent-composer'));
 
-  testWidgets('查资料按消息开启，流式正文先显示并可停止', (tester) async {
+  testWidgets('联网无需填搜索词，搜索时清除预览且可停止流式回复', (tester) async {
     final completion = Completer<AiAgentResponse>();
     final repository = _FakeAiAgentRepository(completer: completion);
     final controller = MarkdrawController();
@@ -45,15 +45,22 @@ void main() {
         ),
       ),
     );
-    expect(find.text('搜索关键词'), findsNothing);
-    await tester.tap(find.byTooltip('查资料'));
+    await tester.tap(find.byTooltip('开启联网搜索'));
     await tester.pump();
-    await tester.enterText(find.widgetWithText(TextField, '搜索关键词'), '梯度消失');
+    expect(find.byTooltip('关闭联网搜索'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
     await tester.enterText(composer, '解释这段');
     await tester.pump();
     await tester.tap(find.byTooltip('发送'));
     await tester.pump();
-    expect(repository.receivedWebQuery, '梯度消失');
+    expect(repository.receivedAllowWebSearch, isTrue);
+    repository.emitText!('搜索前的正文');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('搜索前的正文'), findsOneWidget);
+    repository.emitSearch!();
+    await tester.pump();
+    expect(find.text('搜索前的正文'), findsNothing);
+    expect(find.text('正在查找资料并生成回复…'), findsOneWidget);
     repository.emitText!('逐段显示');
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('逐段显示'), findsOneWidget);
@@ -63,6 +70,7 @@ void main() {
     expect(repository.cancelToken!.isCancelled, isTrue);
     expect(find.text('逐段显示'), findsOneWidget);
     expect(find.text('过期的完整回复'), findsNothing);
+    expect(find.byTooltip('关闭联网搜索'), findsOneWidget);
   });
 
   testWidgets('宽屏停靠可调宽，窄屏和键盘可操作，收起后保留输入', (tester) async {
@@ -1566,7 +1574,8 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final receivedAttachments = <List<AiVisualAttachment>>[];
   NativeHttpCancelToken? cancelToken;
   void Function(String)? emitText;
-  String? receivedWebQuery;
+  bool? receivedAllowWebSearch;
+  VoidCallback? emitSearch;
 
   @override
   Future<AiAgentResponse> run({
@@ -1577,14 +1586,16 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     List<AiVisualAttachment> attachments = const [],
     NativeHttpCancelToken? cancelToken,
     void Function(String)? onText,
-    String? webQuery,
+    bool allowWebSearch = false,
+    VoidCallback? onWebSearch,
   }) async {
     conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
     receivedAttachments.add(attachments);
     this.cancelToken = cancelToken;
     emitText = onText;
-    receivedWebQuery = webQuery;
+    receivedAllowWebSearch = allowWebSearch;
+    emitSearch = onWebSearch;
     if (completer != null) return completer!.future;
     if (conversation.isNotEmpty) {
       return const AiAgentResponse(
