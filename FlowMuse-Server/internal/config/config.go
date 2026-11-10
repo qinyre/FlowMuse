@@ -39,6 +39,7 @@ type Config struct {
 	MyScriptEndpoint         string
 	RecognitionTimeout       time.Duration
 	AITimeout                time.Duration
+	TavilyAPIKey             string
 	LayoutV3BaseURL          string
 	LayoutV3APIKey           string
 	LayoutV3Model            string
@@ -81,6 +82,7 @@ func Load() (Config, error) {
 			20*time.Second,
 		),
 		AITimeout:       envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
+		TavilyAPIKey:    os.Getenv("FLOWMUSE_TAVILY_API_KEY"),
 		LayoutV3BaseURL: env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
 		LayoutV3APIKey:  envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),
 		LayoutV3Model:   env("FLOWMUSE_LAYOUT_V3_MODEL", ""),

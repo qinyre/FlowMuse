@@ -410,6 +410,7 @@ void main() {
           apiKey: 'test-key',
           model: 'test-model',
         ),
+        readSearchToken: () async => 'mock-session',
         post:
             ({
               required url,
@@ -418,27 +419,44 @@ void main() {
               connectTimeoutMs = 8000,
               readTimeoutMs = 130000,
               cancelToken,
-            }) async => NativeHttpResponse(
-              statusCode: 200,
-              body: jsonEncode({
-                'choices': [
-                  {
-                    'message': {
-                      'content': '整理稿已生成',
-                      'tool_calls': [
-                        {
-                          'type': 'function',
-                          'function': {
-                            'name': 'draft_note',
-                            'arguments': jsonEncode({'text': draft}),
+            }) async {
+              if (url.endsWith('/api/assistant/web-search')) {
+                expect(jsonDecode(body), {'query': '讲义'});
+                return const NativeHttpResponse(
+                  statusCode: 200,
+                  body:
+                      '[{"title":"讲义补充","url":"https://example.test/lecture","snippet":"课程资料"}]',
+                );
+              }
+              final request = jsonDecode(body) as Map;
+              final tools = request['tools'] as List;
+              final canSearch = tools.any(
+                (tool) => tool['function']['name'] == 'web_search',
+              );
+              return NativeHttpResponse(
+                statusCode: 200,
+                body: jsonEncode({
+                  'choices': [
+                    {
+                      'message': {
+                        'content': canSearch ? null : '整理稿已生成',
+                        'tool_calls': [
+                          {
+                            'type': 'function',
+                            'function': {
+                              'name': canSearch ? 'web_search' : 'draft_note',
+                              'arguments': jsonEncode(
+                                canSearch ? {'query': '讲义'} : {'text': draft},
+                              ),
+                            },
                           },
-                        },
-                      ],
+                        ],
+                      },
                     },
-                  },
-                ],
-              }),
-            ),
+                  ],
+                }),
+              );
+            },
       ),
     );
     final controller = await _open(tester, container, note);
@@ -463,7 +481,9 @@ void main() {
     tester.widget<MarkdrawEditor>(editor).onAiPressed!();
     await tester.pumpAndSettle();
     final composer = find.byKey(const ValueKey('note-agent-composer'));
-    await tester.enterText(composer, '整理为笔记');
+    await tester.tap(find.byTooltip('开启联网搜索'));
+    await tester.pump();
+    await tester.enterText(composer, '找点讲义资料并整理为笔记');
     await tester.pump();
     await tester.tap(find.byTooltip('发送'));
     await tester.pumpAndSettle();
@@ -479,6 +499,13 @@ void main() {
     expect(controller.layout.pages.first.id, original.id);
     expect(find.text('已写入笔记'), findsOneWidget);
     expect(find.text('整理稿已生成'), findsOneWidget);
+    expect(
+      controller.currentScene.activeElements
+          .whereType<TextElement>()
+          .map((element) => element.text)
+          .join(' '),
+      contains('https://example.test/lecture'),
+    );
     controller.undo();
     await tester.pumpAndSettle();
     expect(controller.layout.pages.single.id, original.id);

@@ -22,6 +22,57 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final composer = find.byKey(const ValueKey('note-agent-composer'));
+
+  testWidgets('联网无需填搜索词，搜索时清除预览且可停止流式回复', (tester) async {
+    final completion = Completer<AiAgentResponse>();
+    final repository = _FakeAiAgentRepository(completer: completion);
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '',
+            texts: const [],
+            contextTruncated: false,
+            contextLabel: '未添加笔记来源',
+            sourceProvider: (scope) => readAiAgentSource(controller, scope),
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('开启联网搜索'));
+    await tester.pump();
+    expect(find.byTooltip('关闭联网搜索'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(composer, '解释这段');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(repository.receivedAllowWebSearch, isTrue);
+    repository.emitText!('搜索前的正文');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('搜索前的正文'), findsOneWidget);
+    repository.emitSearch!();
+    await tester.pump();
+    expect(find.text('搜索前的正文'), findsNothing);
+    expect(find.text('正在查找资料并生成回复…'), findsOneWidget);
+    repository.emitText!('逐段显示');
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('逐段显示'), findsOneWidget);
+    await tester.tap(find.byTooltip('取消生成'));
+    completion.complete(const AiAgentResponse(message: '过期的完整回复', actions: []));
+    await tester.pumpAndSettle();
+    expect(repository.cancelToken!.isCancelled, isTrue);
+    expect(find.text('逐段显示'), findsOneWidget);
+    expect(find.text('过期的完整回复'), findsNothing);
+    expect(find.byTooltip('关闭联网搜索'), findsOneWidget);
+  });
+
   testWidgets('宽屏停靠可调宽，窄屏和键盘可操作，收起后保留输入', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1522,6 +1573,9 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final receivedTexts = <List<AiNoteText>>[];
   final receivedAttachments = <List<AiVisualAttachment>>[];
   NativeHttpCancelToken? cancelToken;
+  void Function(String)? emitText;
+  bool? receivedAllowWebSearch;
+  VoidCallback? emitSearch;
 
   @override
   Future<AiAgentResponse> run({
@@ -1531,11 +1585,17 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     List<AiAgentConversationTurn> conversation = const [],
     List<AiVisualAttachment> attachments = const [],
     NativeHttpCancelToken? cancelToken,
+    void Function(String)? onText,
+    bool allowWebSearch = false,
+    VoidCallback? onWebSearch,
   }) async {
     conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
     receivedAttachments.add(attachments);
     this.cancelToken = cancelToken;
+    emitText = onText;
+    receivedAllowWebSearch = allowWebSearch;
+    emitSearch = onWebSearch;
     if (completer != null) return completer!.future;
     if (conversation.isNotEmpty) {
       return const AiAgentResponse(

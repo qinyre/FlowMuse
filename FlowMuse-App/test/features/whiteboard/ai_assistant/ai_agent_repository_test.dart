@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
@@ -70,7 +72,133 @@ AiAgentRepository _repositoryWith(_FakePost post) => AiAgentRepository(
   post: post.call,
 );
 
+final _webSearchDefinition = predicate<Map>(
+  (tool) => tool['function']?['name'] == 'web_search',
+);
+
 void main() {
+  test('HTTP 流式正文在响应关闭前交给助手', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final finish = Completer<void>();
+    final requestBody = Completer<Map<String, Object?>>();
+    server.listen((request) async {
+      final body = await utf8.decoder.bind(request).join();
+      requestBody.complete(jsonDecode(body) as Map<String, Object?>);
+      request.response.headers.contentType = ContentType(
+        'text',
+        'event-stream',
+        charset: 'utf-8',
+      );
+      request.response.bufferOutput = false;
+      request.response.write(
+        'data: {"choices":[{"delta":{"content":"部分正文"}}]}\n\n',
+      );
+      await request.response.flush();
+      await finish.future;
+      request.response.write(
+        'data: {"choices":[{"delta":{"content":"完成"},"finish_reason":"stop"}]}\n\n',
+      );
+      await request.response.close();
+    });
+    final repository = AiAgentRepository(
+      config: AiAgentConfig(
+        baseUrl: 'http://127.0.0.1:${server.port}/v1',
+        apiKey: 'test-key',
+        model: 'test-model',
+      ),
+    );
+    final first = Completer<String>();
+    final result = repository.run(
+      instruction: '解释',
+      noteTitle: '',
+      texts: const [],
+      allowWebSearch: true,
+      onText: (fragment) {
+        if (!first.isCompleted) first.complete(fragment);
+      },
+    );
+    try {
+      expect(await first.future.timeout(const Duration(seconds: 5)), '部分正文');
+      final request = await requestBody.future;
+      expect(request['stream'], isTrue);
+      expect(request['tools'], contains(_webSearchDefinition));
+    } finally {
+      finish.complete();
+    }
+    expect((await result).message, '部分正文完成');
+  });
+
+  test('联网时由模型决定搜索词，搜索后继续生成并保留来源', () async {
+    final requests = <String>[];
+    final modelPost = _FakePost(200);
+    var searchStarted = false;
+    final repository = AiAgentRepository(
+      config: const AiAgentConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'model-key',
+        model: 'test-model',
+      ),
+      readSearchToken: () async => 'flowmuse-session',
+      post:
+          ({
+            required url,
+            headers = const {},
+            required body,
+            connectTimeoutMs = 8000,
+            readTimeoutMs = 15000,
+            cancelToken,
+          }) {
+            requests.add(url);
+            if (url.endsWith('/api/assistant/web-search')) {
+              expect(searchStarted, isTrue);
+              expect(jsonDecode(body), {'query': '梯度消失'});
+              expect(headers['Authorization'], 'Bearer flowmuse-session');
+              return Future.value(
+                const NativeHttpResponse(
+                  statusCode: 200,
+                  body:
+                      '[{"title":"教程","url":"https://example.com/guide","snippet":"一段检索摘要"}]',
+                ),
+              );
+            }
+            expect(headers['Authorization'], 'Bearer model-key');
+            expect(body, contains('私有笔记正文'));
+            expect(body, isNot(contains('flowmuse-session')));
+            if (requests.length == 1) {
+              expect(jsonDecode(body)['tools'], contains(_webSearchDefinition));
+              expect(body, isNot(contains('一段检索摘要')));
+              return Future.value(
+                const NativeHttpResponse(
+                  statusCode: 200,
+                  body:
+                      '{"choices":[{"message":{"tool_calls":[{"function":{"name":"web_search","arguments":{"query":" 梯度消失 "}}}]}}]}',
+                ),
+              );
+            }
+            expect(
+              jsonDecode(body)['tools'],
+              isNot(contains(_webSearchDefinition)),
+            );
+            expect(body, contains('一段检索摘要'));
+            return modelPost.call(url: url, body: body);
+          },
+    );
+    final result = await repository.run(
+      instruction: '请结合我的笔记解释',
+      noteTitle: '课堂笔记',
+      texts: [AiNoteText(id: 't1', text: '私有笔记正文')],
+      allowWebSearch: true,
+      onWebSearch: () => searchStarted = true,
+    );
+    expect(requests, hasLength(3));
+    expect(result.message, '好的');
+    expect(
+      result.webSources.single.url,
+      Uri.parse('https://example.com/guide'),
+    );
+  });
+
   test('官方预设测试发送图片并按服务商添加兼容参数', () async {
     for (final provider in AiAgentProvider.values) {
       final post = _FakePost(200, insertedText: 'Blue');
