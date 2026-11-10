@@ -187,7 +187,7 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 
 ## AI 笔记助手查资料
 
-在后端 `.env` 设置 `FLOWMUSE_BRAVE_SEARCH_API_KEY`，用 `docker compose up -d --no-deps --build collab-server` 更新容器。留空时查资料返回 503，普通助手对话继续可用。搜索需要已验证的 FlowMuse 账号，当前单进程限制每秒 1 次、每个 UTC 日共 200 次、每账号每日 20 次。进程重启会重置本地计数，服务商额度仍独立生效。配置后使用无敏感信息的关键词实测检索、引用和写回。
+在后端 `.env` 设置 `FLOWMUSE_TAVILY_API_KEY`，用 `docker compose up -d --no-deps --build collab-server` 更新容器。使用 Tavily 免费 Researcher 套餐并保持按量付费关闭。后端固定使用基础搜索，每次消耗 1 积分，额度用尽时返回 429。留空时查资料返回 503，普通助手对话继续可用。搜索需要已验证的 FlowMuse 账号，当前单进程限制每秒 1 次、每个 UTC 日共 200 次、每账号每日 20 次。进程重启会重置本地计数，Tavily 额度仍独立生效。配置后使用公开关键词实测检索、引用和写回。 [Tavily 额度说明](https://help.tavily.com/articles/8298987937-billing-credits-usage-limits)
 
 ## 源码授权与发行通知
 

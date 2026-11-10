@@ -90,7 +90,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
 	authAPI.Register(mux)
-	mux.Handle("POST "+websearch.Endpoint, websearch.Handler(cfg.BraveSearchAPIKey, authAPI.AuthenticateRequest))
+	mux.Handle("POST "+websearch.Endpoint, websearch.Handler(cfg.TavilyAPIKey, authAPI.AuthenticateRequest))
 	socialStore := social.NewStore(db)
 	socialEnabled := cfg.SocialEnabled
 	if socialEnabled {

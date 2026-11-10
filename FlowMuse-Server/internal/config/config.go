@@ -39,7 +39,7 @@ type Config struct {
 	MyScriptEndpoint         string
 	RecognitionTimeout       time.Duration
 	AITimeout                time.Duration
-	BraveSearchAPIKey        string
+	TavilyAPIKey             string
 	LayoutV3BaseURL          string
 	LayoutV3APIKey           string
 	LayoutV3Model            string
@@ -81,12 +81,12 @@ func Load() (Config, error) {
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
 		),
-		AITimeout:         envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
-		BraveSearchAPIKey: os.Getenv("FLOWMUSE_BRAVE_SEARCH_API_KEY"),
-		LayoutV3BaseURL:   env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
-		LayoutV3APIKey:    envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),
-		LayoutV3Model:     env("FLOWMUSE_LAYOUT_V3_MODEL", ""),
-		LayoutV3Timeout:   envIntSeconds("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", 120),
+		AITimeout:       envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
+		TavilyAPIKey:    os.Getenv("FLOWMUSE_TAVILY_API_KEY"),
+		LayoutV3BaseURL: env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
+		LayoutV3APIKey:  envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),
+		LayoutV3Model:   env("FLOWMUSE_LAYOUT_V3_MODEL", ""),
+		LayoutV3Timeout: envIntSeconds("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", 120),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")

@@ -1,6 +1,7 @@
 package websearch
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,6 +16,12 @@ import (
 )
 
 const Endpoint = "/api/assistant/web-search"
+
+const (
+	tavilySearchURL  = "https://api.tavily.com/search"
+	tavilyUsageLimit = 432
+	maxResults       = 5
+)
 
 type source struct {
 	Title   string `json:"title"`
@@ -82,45 +89,58 @@ func handler(key string, authenticate func(*http.Request) (auth.Identity, error)
 			return
 		}
 
-		params := url.Values{"q": {query}, "count": {"5"}, "safesearch": {"strict"}, "text_decorations": {"false"}}
-		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://api.search.brave.com/res/v1/web/search?"+params.Encode(), nil)
+		body, err := json.Marshal(map[string]any{
+			"query":           query,
+			"search_depth":    "basic",
+			"auto_parameters": false,
+			"max_results":     maxResults,
+			"safe_search":     true,
+		})
+		if err != nil {
+			http.Error(w, "search unavailable", http.StatusBadGateway)
+			return
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tavilySearchURL, bytes.NewReader(body))
 		if err != nil {
 			http.Error(w, "search unavailable", http.StatusBadGateway)
 			return
 		}
 		request.Header.Set("Accept", "application/json")
-		request.Header.Set("X-Subscription-Token", key)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+key)
 		response, err := client.Do(request)
 		if err != nil {
 			http.Error(w, "search unavailable", http.StatusBadGateway)
 			return
 		}
 		defer response.Body.Close()
+		if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == tavilyUsageLimit {
+			http.Error(w, "search limit reached", http.StatusTooManyRequests)
+			return
+		}
 		var payload struct {
-			Web struct {
-				Results []struct {
-					Title       string
-					URL         string
-					Description string
-				}
+			Results []struct {
+				Title   string `json:"title"`
+				URL     string `json:"url"`
+				Content string `json:"content"`
 			}
 		}
 		if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 512<<10)).Decode(&payload) != nil {
 			http.Error(w, "search unavailable", http.StatusBadGateway)
 			return
 		}
-		results := make([]source, 0, 5)
+		results := make([]source, 0, maxResults)
 		seen := map[string]bool{}
-		for _, item := range payload.Web.Results {
+		for _, item := range payload.Results {
 			link, err := url.Parse(item.URL)
 			if err != nil || (link.Scheme != "https" && link.Scheme != "http") ||
 				link.Hostname() == "" || link.User != nil || len(item.URL) > 2048 || seen[item.URL] ||
-				strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.Description) == "" {
+				strings.TrimSpace(item.Title) == "" || strings.TrimSpace(item.Content) == "" {
 				continue
 			}
 			seen[item.URL] = true
-			results = append(results, source{truncate(item.Title, 180), item.URL, truncate(item.Description, 600)})
-			if len(results) == 5 {
+			results = append(results, source{truncate(item.Title, 180), item.URL, truncate(item.Content, 600)})
+			if len(results) == maxResults {
 				break
 			}
 		}
