@@ -64,6 +64,56 @@ void main() {
       .addElement(stroke('s1', 10, 20))
       .addElement(stroke('s2', 10, 120));
 
+  test('对齐的两行短手写只发一次初读请求，按本地顺序排版', () async {
+    final strokes = [stroke('s1', 10, 20), stroke('s2', 12, 38)];
+    final scene = Scene().addElement(strokes.first).addElement(strokes.last);
+    final transport = FakeRecognitionTransport(
+      responder: (body) async {
+        final request = jsonDecode(body) as Map<String, Object?>;
+        expect(request['stage'], 'read');
+        return buildBatchResponseBody(
+          request,
+          textOf: (id) => id == 'r:s1' ? '植物生长' : '光照和水分',
+        );
+      },
+    );
+    final pipeline = RecognitionPipeline(
+      repository: RecognitionRepository(
+        gateway: SmartLayoutHttpGateway(
+          serverUri: Uri.parse('https://server.test'),
+          post: transport.post,
+        ),
+      ),
+      structureRecoverer: const StructureRecovery(),
+    );
+    final result = await pipeline.run(
+      captureOf(scene),
+      correctedPartitions: [
+        for (final stroke in strokes)
+          RegionPartition(
+            strokes: [stroke],
+            record: RegionRecord(
+              regionId: 'r:${stroke.id.value}',
+              targetSourceIds: [stroke.id.value],
+              localLineHeight: 8,
+              bounds: RecognitionBounds(
+                left: stroke.x,
+                top: stroke.y,
+                width: stroke.width,
+                height: stroke.height,
+              ),
+            ),
+          ),
+      ],
+    );
+    expect(transport.requests, hasLength(1));
+    expect(result.partial, isFalse);
+    final structure = result.structureResult as StructureResult;
+    expect(structure.usedModel, isFalse);
+    expect(structure.readingOrder, ['ink:r:s1', 'ink:r:s2']);
+    expect(structure.units.map((unit) => unit.text), ['植物生长', '光照和水分']);
+  });
+
   test('总预算在渲染前耗尽：不出图、不发请求、全部源保留', () async {
     final transport = FakeRecognitionTransport();
     final result = await pipelineOf(transport).run(
