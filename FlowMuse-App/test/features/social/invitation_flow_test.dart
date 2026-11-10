@@ -26,6 +26,32 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
+  test('设备登记触发上限时引导管理旧设备', () async {
+    final store = InvitationDeviceStore(
+      serverUrl: 'https://test.example',
+      userId: 'a',
+    );
+    final repo = SocialRepository(
+      serverUrl: 'https://test.example',
+      token: 'test',
+      client: MockClient((request) async {
+        expect(request.url.path, '/api/social/devices');
+        return http.Response('{"code":"limit_reached"}', 429);
+      }),
+    );
+    final controller = InvitationController(repo, store);
+    addTearDown(controller.close);
+    addTearDown(repo.close);
+    await expectLater(
+      controller.accept('test-invitation'),
+      throwsA(
+        isA<SocialException>()
+            .having((e) => e.code, 'code', 'limit_reached')
+            .having((e) => e.message, 'message', contains('我的设备安全')),
+      ),
+    );
+  });
+
   test('邀请功能可用后自动准备设备，普通消息刷新不重复登记', () async {
     final store = InvitationDeviceStore(
       serverUrl: 'https://test.example',
