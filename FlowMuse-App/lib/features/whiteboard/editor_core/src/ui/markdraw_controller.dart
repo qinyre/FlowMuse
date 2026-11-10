@@ -3112,15 +3112,24 @@ class MarkdrawController extends ChangeNotifier {
       // Flutter Web converts Ctrl+wheel and trackpad pinch into scale signals.
       factor = event.scale;
     } else if (event is PointerScrollEvent) {
-      if (event.scrollDelta.dy == 0) return;
+      final delta = event.scrollDelta;
+      if (!delta.dx.isFinite || !delta.dy.isFinite) return;
       final ctrl =
           HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       if (isPagedViewport && !ctrl) {
-        scrollPagedViewportBy(event.scrollDelta.dy);
+        // Keep vertical mouse-wheel paging in RTL; trackpad axes stay physical.
+        final scroll = _layout.isRightToLeft && delta.dx == 0
+            ? Offset(-delta.dy, 0)
+            : delta;
+        panViewport(
+          scroll.dx / _editorState.viewport.zoom,
+          scroll.dy / _editorState.viewport.zoom,
+        );
         return;
       }
-      factor = event.scrollDelta.dy < 0 ? 1.1 : 0.9;
+      if (delta.dy == 0) return;
+      factor = delta.dy < 0 ? 1.1 : 0.9;
     } else {
       return;
     }
