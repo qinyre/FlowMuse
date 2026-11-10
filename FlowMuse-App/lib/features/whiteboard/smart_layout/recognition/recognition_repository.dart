@@ -71,8 +71,7 @@ class RecognitionRepository {
   /// - 发送前自检：请求 JSON 经 fromJson 重新解析（客户端侧 400 双保险，
   ///   §3.6）；失败抛 [RecognitionException]（invalidRequest，不可重试）。
   /// - [remainingBudget]：本请求允许占用的剩余时间。readTimeout =
-  ///   min(perRequestTimeout, remaining)；到期由内部计时器**主动** [cancelToken.cancel]
-  ///   在途请求（不只靠轮询）。
+  ///   min(perRequestTimeout, remaining)；到期主动取消本次在途请求。
   /// - 响应携带 [RecognitionResponse.fromJson] 的 expectedFor 上下文校验
   ///   （回填四元组 + 覆盖声明，R-12/R-04 双保险）。
   Future<RecognitionResponse> send(
@@ -103,14 +102,17 @@ class RecognitionRepository {
         detail: '剩余预算已耗尽',
       );
     }
-    final readTimeoutMs = remainingBudget < perRequestTimeout
-        ? remainingBudget.inMilliseconds
-        : perRequestTimeout.inMilliseconds;
-
-    // 2. 总预算计时器：到期主动取消在途请求（服务端 ctx 取消兜底之外的
-    //    客户端主动取消，spec §6.1）。
+    final timeout = remainingBudget < perRequestTimeout
+        ? remainingBudget
+        : perRequestTimeout;
+    final readTimeoutMs = timeout.inMilliseconds.clamp(1, 0x7fffffff);
     final activeCancelToken = cancelToken ?? SmartLayoutCancellationToken();
-    final watchdog = Timer(remainingBudget, activeCancelToken.cancel);
+    var deadlineReached = false;
+    final watchdog = Timer(timeout, () {
+      if (activeCancelToken.isCancelled) return;
+      deadlineReached = true;
+      activeCancelToken.cancel();
+    });
     final clock = Stopwatch()..start();
     var outcome = 'failed';
     try {
@@ -121,10 +123,22 @@ class RecognitionRepository {
         token: activeCancelToken,
         readTimeoutMs: readTimeoutMs,
       );
+      if (activeCancelToken.isCancelled) {
+        throw const SmartLayoutHttpCancelledException();
+      }
       final response = _parseResponse(responseBody, request);
       outcome = 'ok';
       return response;
     } on SmartLayoutHttpCancelledException {
+      if (deadlineReached) {
+        outcome = 'requestTimeout';
+        throw const RecognitionException(
+          RecognitionExceptionKind.network,
+          retryable: false,
+          code: 'requestTimeout',
+          detail: '本次模型请求超时',
+        );
+      }
       outcome = 'cancelled';
       throw const RecognitionException(
         RecognitionExceptionKind.cancelled,

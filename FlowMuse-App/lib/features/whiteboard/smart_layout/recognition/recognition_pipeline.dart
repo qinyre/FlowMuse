@@ -261,6 +261,7 @@ enum RecognitionVerifyTrigger {
   nonTextButTextLike,
   brokenNumbering,
   shapeMismatch,
+  compactHandwriting,
 }
 
 /// R5 结构恢复 seam：pipeline 在 structuring 阶段调用；实现方按 §7
@@ -327,7 +328,9 @@ class RecognitionPipeline {
 
   RecognitionPipelineState _state = RecognitionPipelineState.idle;
   bool _cancelRequested = false;
-  SmartLayoutCancellationToken? _cancelToken;
+  final _activeRequests = <SmartLayoutCancellationToken>{};
+  static const _verifyTimeLimit = Duration(seconds: 35);
+  static const _structureTimeLimit = Duration(seconds: 45);
   RecognitionBudget _budget = const RecognitionBudget();
   final Stopwatch _clock = Stopwatch();
   int _stateStartedMs = 0;
@@ -357,7 +360,13 @@ class RecognitionPipeline {
   /// 请求取消：置位标记并主动取消在途请求。
   void cancel() {
     _cancelRequested = true;
-    _cancelToken?.cancel();
+    _cancelInFlight();
+  }
+
+  void _cancelInFlight() {
+    for (final token in _activeRequests) {
+      token.cancel();
+    }
     _renderBuilder?.cancel();
   }
 
@@ -396,10 +405,7 @@ class RecognitionPipeline {
     }
     _budget = budget;
     _clock.start();
-    final deadline = Timer(budget.totalTimeout, () {
-      _cancelToken?.cancel();
-      _renderBuilder?.cancel();
-    });
+    final deadline = Timer(budget.totalTimeout, _cancelInFlight);
     try {
       return await _run(
         capture,
@@ -431,7 +437,6 @@ class RecognitionPipeline {
       throw StateError('pipeline 实例不可复用（一个操作一个实例）');
     }
     final stopwatch = _clock;
-    _cancelToken = SmartLayoutCancellationToken();
     _budget = budget;
     final partialNotes = <String>[];
     final assetIndex = RegionAssetIndex();
@@ -564,56 +569,70 @@ class RecognitionPipeline {
     }
     _checkCancelled();
 
-    // ---- reading：初读（批 ≤8 且编码后 ≤16MiB；missing→保留）----
+    // ---- reading：小批并行初读，按批次顺序应用结果 ----
     _transition(RecognitionPipelineState.reading);
-    final batches = _batchRegions(_effectivePartitions, budget);
-    for (final batch in batches) {
+    // 大页适当扩大批次，给后续复核与结构请求留出调用额度。
+    final readCalls = math.max(1, _budget.modelCallsRemaining - 3);
+    final readBatchSize = math.max(
+      4,
+      (_assetByRegion.length / readCalls).ceil(),
+    );
+    final batches = _batchRegions(
+      _effectivePartitions,
+      budget,
+      maxRegions: math.min(budget.batchMaxRegions, readBatchSize),
+    );
+    final concurrency = math
+        .min(2, math.max(1, budget.networkConcurrency))
+        .toInt();
+    for (var start = 0; start < batches.length;) {
       _checkCancelled();
-      if (!_budget.canSpendModelCall || _budgetExpired) {
-        // 预算不足则不发，该批区域保留（§6.2 执行点）。无响应不是模型
-        // 输出——不产生 outcome，不进入复核触发表。
-        for (final partition in batch) {
-          for (final sourceId in partition.record.targetSourceIds) {
-            ledger = ledger.preserve(
-              sourceId,
-              SourcePreserveReason.budgetExceeded,
-            );
-          }
-          partialNotes.add('模型预算耗尽保留: ${partition.record.regionId}');
+      final canDispatch = _budget.canSpendModelCall && !_budgetExpired;
+      final int end = canDispatch
+          ? math
+                .min(
+                  batches.length,
+                  start + math.min(concurrency, _budget.modelCallsRemaining),
+                )
+                .toInt()
+          : batches.length;
+      final responses = canDispatch
+          ? await Future.wait([
+              for (var i = start; i < end; i++)
+                _dispatch(
+                  capture,
+                  batches[i],
+                  stopwatch: stopwatch,
+                  bearerToken: bearerToken,
+                ),
+            ])
+          : const <RecognitionResponse?>[];
+      _checkCancelled();
+      for (var i = start; i < end; i++) {
+        final batch = batches[i];
+        final response = canDispatch ? responses[i - start] : null;
+        if (response is RecognitionBatchResponse) {
+          _applyBatchResponse(batch, response, ledger, partialNotes);
+          ledger = _ledgerAfterBatch;
+          continue;
         }
-        continue;
-      }
-      final response = await _dispatch(
-        capture,
-        batch,
-        stopwatch: stopwatch,
-        bearerToken: bearerToken,
-        verify: false,
-      );
-      if (response == null) {
-        // 整批未获有效响应（重试后仍失败/解析失败类）：不可归属即整批
-        // 无效，不凭空恢复（§3.2）。无响应不产生 outcome、不触发复核。
+        final budgetExceeded = !canDispatch || _budgetExpired;
         for (final partition in batch) {
           for (final sourceId in partition.record.targetSourceIds) {
             ledger = ledger.preserve(
               sourceId,
-              _budgetExpired
+              budgetExceeded
                   ? SourcePreserveReason.budgetExceeded
                   : SourcePreserveReason.missingResponse,
             );
           }
-          partialNotes.add('批次未获有效响应保留: ${partition.record.regionId}');
+          partialNotes.add(
+            '${budgetExceeded ? '模型预算耗尽保留' : '批次未获有效响应保留'}: '
+            '${partition.record.regionId}',
+          );
         }
-        continue;
       }
-      _applyBatchResponse(
-        batch,
-        response as RecognitionBatchResponse,
-        ledger,
-        partialNotes,
-      );
-      ledger = _ledgerAfterBatch;
-      _checkCancelled();
+      start = end;
     }
 
     // ---- 复核触发评估 → regrouping（至多一轮）→ verifying ----
@@ -627,6 +646,22 @@ class RecognitionPipeline {
         candidates[partition] = trigger;
       }
     }
+    final compactSlots = math
+        .min(4, budget.verifyMaxRegions - candidates.length)
+        .toInt();
+    if (compactSlots > 0 && _budget.canSpendModelCall && !_budgetExpired) {
+      for (final partition
+          in _compactHandwritingRegions()
+              .where(
+                (p) =>
+                    !candidates.containsKey(p) &&
+                    !reusedRegionIds.contains(p.record.regionId),
+              )
+              .take(compactSlots)) {
+        candidates[partition] = RecognitionVerifyTrigger.compactHandwriting;
+        _independentVerifyIds.add(partition.record.regionId);
+      }
+    }
     if (candidates.isNotEmpty && !_budgetExpired) {
       var capped = candidates.entries.toList()
         ..sort((a, b) => a.value.index.compareTo(b.value.index));
@@ -634,11 +669,23 @@ class RecognitionPipeline {
         capped = capped.sublist(0, budget.verifyMaxRegions);
       }
       _transition(RecognitionPipelineState.regrouping);
-      final groups = budget.regroupRounds > 0
-          ? _mergeAdjacentCandidates(capped)
-          : [
-              for (final entry in capped) [entry.key],
-            ];
+      for (final entry in capped) {
+        _verifyReasons[entry.key.record.regionId] = _reasonOfTrigger(
+          entry.value,
+        );
+      }
+      final groups = [
+        if (budget.regroupRounds > 0)
+          ..._mergeAdjacentCandidates(
+            capped.where(
+              (e) => !_independentVerifyIds.contains(e.key.record.regionId),
+            ),
+          ),
+        for (final entry in capped)
+          if (budget.regroupRounds <= 0 ||
+              _independentVerifyIds.contains(entry.key.record.regionId))
+            [entry.key],
+      ];
       final verifyPartitions = <RegionPartition>[];
       final regroupBuilder = RegionAssetBuilder(
         capturedScene: capture.scene,
@@ -726,27 +773,51 @@ class RecognitionPipeline {
       );
       _checkCancelled();
       _transition(RecognitionPipelineState.verifying);
-      for (final group in _batchRegions(verifyPartitions, budget)) {
+      final verifyDeadline = stopwatch.elapsed + _verifyTimeLimit;
+      final verifyBatches = [
+        ..._batchRegions(
+          verifyPartitions
+              .where((p) => !_independentVerifyIds.contains(p.record.regionId))
+              .toList(),
+          budget,
+          maxRegions: budget.batchMaxRegions,
+        ),
+        ..._batchRegions(
+          verifyPartitions
+              .where((p) => _independentVerifyIds.contains(p.record.regionId))
+              .toList(),
+          budget,
+          maxRegions: math.min(budget.batchMaxRegions, 2),
+        ),
+      ];
+      for (var start = 0; start < verifyBatches.length; start += concurrency) {
         _checkCancelled();
-        final response = await _dispatch(
-          capture,
-          group,
-          stopwatch: stopwatch,
-          bearerToken: bearerToken,
-          verify: true,
-        );
-        if (response == null) {
-          // 只保留初读诊断，不授予替换许可；下方疑难源结算统一保留。
-          continue;
+        if (stopwatch.elapsed >= verifyDeadline) break;
+        final wave = verifyBatches.skip(start).take(concurrency).toList();
+        final responses = await Future.wait([
+          for (final group in wave)
+            _dispatch(
+              capture,
+              group,
+              stopwatch: stopwatch,
+              bearerToken: bearerToken,
+              verify: true,
+              stageDeadline: verifyDeadline,
+            ),
+        ]);
+        _checkCancelled();
+        for (var i = 0; i < wave.length; i++) {
+          if (responses[i] case final RecognitionBatchResponse response) {
+            _applyBatchResponse(
+              wave[i],
+              response,
+              ledger,
+              partialNotes,
+              verified: true,
+            );
+            ledger = _ledgerAfterBatch;
+          }
         }
-        _applyBatchResponse(
-          group,
-          response as RecognitionBatchResponse,
-          ledger,
-          partialNotes,
-          verified: true,
-        );
-        ledger = _ledgerAfterBatch;
       }
     }
 
@@ -812,7 +883,15 @@ class RecognitionPipeline {
           regionRecords: [
             for (final partition in _effectivePartitions) partition.record,
           ],
-          regionOutcomes: Map.unmodifiable(_outcomes),
+          // 复核未确认的转写仅供诊断，结构阶段按保留原笔迹处理。
+          regionOutcomes: Map.unmodifiable({
+            for (final entry in _outcomes.entries)
+              if (entry.value.targetSourceIds.every(
+                (id) =>
+                    ledger.entryOf(id).status != SourceLedgerStatus.preserved,
+              ))
+                entry.key: entry.value,
+          }),
           remainingBudgetOf: () => _remaining(stopwatch),
           sendStructureRequest: (request) => _dispatchStructure(
             capture,
@@ -916,8 +995,9 @@ class RecognitionPipeline {
   /// 大小提前拆批，不只计区域数，§3.2）。
   List<List<RegionPartition>> _batchRegions(
     List<RegionPartition> partitions,
-    RecognitionBudget budget,
-  ) {
+    RecognitionBudget budget, {
+    required int maxRegions,
+  }) {
     final batches = <List<RegionPartition>>[];
     var current = <RegionPartition>[];
     var currentBytes = 0;
@@ -928,7 +1008,7 @@ class RecognitionPipeline {
       final overhead = 512 + partition.record.regionId.length;
       final requestBytes = currentBytes + overhead + imageBytes;
       if (current.isNotEmpty &&
-          (current.length >= budget.batchMaxRegions ||
+          (current.length >= maxRegions ||
               requestBytes > budget.batchMaxRequestBytes)) {
         batches.add(current);
         current = <RegionPartition>[];
@@ -950,14 +1030,45 @@ class RecognitionPipeline {
     required Stopwatch stopwatch,
     String? bearerToken,
     bool verify = false,
+    Duration? stageDeadline,
+  }) => _dispatchRequest(
+    _cacheKeyOf(capture, batch, verify),
+    () => verify
+        ? _buildVerifyRequest(capture, batch)
+        : _buildReadRequest(capture, batch),
+    stopwatch: stopwatch,
+    bearerToken: bearerToken,
+    stageDeadline: stageDeadline,
+  );
+
+  /// 结构请求派发（R5 seam 使用；同预算同取消语义）。
+  Future<RecognitionStructureResponse?> _dispatchStructure(
+    RecognitionCapture capture,
+    RecognitionStructureRequest request, {
+    required Stopwatch stopwatch,
+    String? bearerToken,
   }) async {
-    if (batch.isEmpty) return null;
+    final response = await _dispatchRequest(
+      '${_cacheKeyOf(capture, const [], false)}|structure|${request.textFingerprint}',
+      () => request,
+      stopwatch: stopwatch,
+      bearerToken: bearerToken,
+      stageDeadline: stopwatch.elapsed + _structureTimeLimit,
+    );
+    return response as RecognitionStructureResponse?;
+  }
+
+  Future<RecognitionResponse?> _dispatchRequest(
+    String cacheKey,
+    RecognitionRequest Function() buildRequest, {
+    required Stopwatch stopwatch,
+    required String? bearerToken,
+    required Duration? stageDeadline,
+  }) async {
     _checkCancelled();
     if (!_budget.canSpendModelCall || _budgetExpired) {
       return null;
     }
-    final isVerify = verify;
-    final cacheKey = _cacheKeyOf(capture, batch, isVerify);
     final cached = _responseCache[cacheKey];
     if (cached != null) {
       _cacheHits++;
@@ -966,17 +1077,19 @@ class RecognitionPipeline {
     var attempts = 0;
     while (true) {
       _checkCancelled();
+      final timeout = _requestTimeout(stopwatch, stageDeadline);
+      if (timeout <= Duration.zero) return null;
       _budget = _budget.spendModelCall();
-      final request = isVerify
-          ? _buildVerifyRequest(capture, batch)
-          : _buildReadRequest(capture, batch);
+      final request = buildRequest();
+      final token = SmartLayoutCancellationToken();
+      _activeRequests.add(token);
       try {
         final response = await _repository.send(
           request,
           bearerToken: bearerToken,
-          cancelToken: _cancelToken,
+          cancelToken: token,
           remainingBudget: _remaining(stopwatch),
-          perRequestTimeout: _budget.perRequestTimeout,
+          perRequestTimeout: timeout,
         );
         _checkCancelled();
         if (_budgetExpired) return null;
@@ -987,66 +1100,32 @@ class RecognitionPipeline {
           if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
-        if (!_canRetry(error, attempts)) {
+        if (!_canRetry(error, attempts, stopwatch, stageDeadline)) {
           _lastFailure = error;
           return null;
         }
         attempts++;
+      } finally {
+        _activeRequests.remove(token);
       }
     }
   }
 
-  /// 结构请求派发（R5 seam 使用；同预算同取消语义）。
-  Future<RecognitionStructureResponse?> _dispatchStructure(
-    RecognitionCapture capture,
-    RecognitionStructureRequest request, {
-    required Stopwatch stopwatch,
-    String? bearerToken,
-  }) async {
-    _checkCancelled();
-    if (!_budget.canSpendModelCall || _budgetExpired) {
-      return null;
-    }
-    final cacheKey =
-        '${_cacheKeyOf(capture, const [], false)}|structure|${request.textFingerprint}';
-    final cached = _responseCache[cacheKey];
-    if (cached != null) {
-      _cacheHits++;
-      return cached as RecognitionStructureResponse;
-    }
-    var attempts = 0;
-    while (true) {
-      _checkCancelled();
-      _budget = _budget.spendModelCall();
-      try {
-        final response = await _repository.send(
-          request,
-          bearerToken: bearerToken,
-          cancelToken: _cancelToken,
-          remainingBudget: _remaining(stopwatch),
-          perRequestTimeout: _budget.perRequestTimeout,
-        );
-        _checkCancelled();
-        if (_budgetExpired) return null;
-        _responseCache[cacheKey] = response;
-        return response as RecognitionStructureResponse;
-      } on RecognitionException catch (error) {
-        if (error.kind == RecognitionExceptionKind.cancelled) {
-          if (_budgetExpired && !_cancelRequested) return null;
-          throw RecognitionCancelledException(null);
-        }
-        if (!_canRetry(error, attempts)) {
-          _lastFailure = error;
-          return null;
-        }
-        attempts++;
-      }
-    }
+  Duration _requestTimeout(Stopwatch stopwatch, Duration? stageDeadline) {
+    final perRequest = _budget.perRequestTimeout;
+    if (stageDeadline == null) return perRequest;
+    final remaining = stageDeadline - stopwatch.elapsed;
+    return remaining < perRequest ? remaining : perRequest;
   }
 
   /// 初读、复核和结构共用：慢请求超时不重做；快速故障仅在剩余预算
   /// 足够容纳一次完整尝试时重试，避免临近总期限再次启动模型。
-  bool _canRetry(RecognitionException error, int attempts) =>
+  bool _canRetry(
+    RecognitionException error,
+    int attempts,
+    Stopwatch stopwatch,
+    Duration? stageDeadline,
+  ) =>
       error.retryable &&
       error.code != 'providerTimeout' &&
       error.code != 'invalidProviderResponse' &&
@@ -1054,7 +1133,8 @@ class RecognitionPipeline {
       error.kind != RecognitionExceptionKind.invalidRequest &&
       attempts < _budget.retryPerRequest &&
       _budget.canSpendModelCall &&
-      _remaining(_clock) >= _budget.perRequestTimeout;
+      _remaining(stopwatch) >= _budget.perRequestTimeout &&
+      _requestTimeout(stopwatch, stageDeadline) >= _budget.perRequestTimeout;
 
   RecognitionReadRequest _buildReadRequest(
     RecognitionCapture capture,
@@ -1099,15 +1179,21 @@ class RecognitionPipeline {
             reason:
                 _verifyReasons[partition.record.regionId] ??
                 RecognitionVerifyReason.lowConfidence,
-            originalText: _outcomes[partition.record.regionId]?.text,
+            originalText:
+                _independentVerifyIds.contains(partition.record.regionId)
+                ? null
+                : _outcomes[partition.record.regionId]?.text,
             originalConfidence:
-                _outcomes[partition.record.regionId]?.confidence,
+                _independentVerifyIds.contains(partition.record.regionId)
+                ? null
+                : _outcomes[partition.record.regionId]?.confidence,
           ),
       ],
     );
   }
 
   final Map<String, RecognitionVerifyReason> _verifyReasons = {};
+  final Set<String> _independentVerifyIds = {};
 
   String _base64Of(RegionPartition partition) {
     final asset = _assetByRegion[partition.record.regionId];
@@ -1148,8 +1234,9 @@ class RecognitionPipeline {
     RegionReadOutcome outcome,
   ) {
     // 1. 初读置信低于阈值。
-    if (outcome.confidence != null &&
-        outcome.confidence! < verifyConfidenceThreshold) {
+    if (outcome.status == RecognitionRegionStatus.uncertain ||
+        (outcome.confidence != null &&
+            outcome.confidence! < verifyConfidenceThreshold)) {
       return RecognitionVerifyTrigger.lowConfidence;
     }
     final text = outcome.text ?? '';
@@ -1186,6 +1273,25 @@ class RecognitionPipeline {
     return null;
   }
 
+  Iterable<RegionPartition> _compactHandwritingRegions() {
+    final textLines = [
+      for (final partition in _effectivePartitions)
+        if (_outcomes[partition.record.regionId]?.status ==
+                RecognitionRegionStatus.recognized &&
+            partition.strokes.length >= 18 &&
+            partition.record.bounds.width >=
+                partition.record.bounds.height * 2.5 &&
+            !partition.isDrawingLike)
+          partition,
+    ];
+    if (textLines.length < 4) return const [];
+    final heights = textLines.map((p) => p.record.bounds.height).toList()
+      ..sort();
+    final median = heights[heights.length ~/ 2];
+    // shortcut: 仅复核相对较矮的密集行，等多页真稿对照后再扩展触发条件。
+    return textLines.where((p) => p.record.bounds.height <= median * .85);
+  }
+
   RegionPartition? _regionAbove(RegionPartition partition) {
     RegionPartition? closest;
     for (final other in _effectivePartitions) {
@@ -1204,15 +1310,12 @@ class RecognitionPipeline {
   /// 同行相邻疑难区域的合并提案；调用方重建成员与图像后再发复核，
   /// 不把网络分批误当作分区变更。
   List<List<RegionPartition>> _mergeAdjacentCandidates(
-    List<MapEntry<RegionPartition, RecognitionVerifyTrigger>> candidates,
+    Iterable<MapEntry<RegionPartition, RecognitionVerifyTrigger>> candidates,
   ) {
     final sorted = [...candidates]
       ..sort(
         (a, b) => a.key.record.bounds.top.compareTo(b.key.record.bounds.top),
       );
-    for (final entry in sorted) {
-      _verifyReasons[entry.key.record.regionId] = _reasonOfTrigger(entry.value);
-    }
     final groups = <List<RegionPartition>>[];
     for (final entry in sorted) {
       var merged = false;
@@ -1260,6 +1363,7 @@ class RecognitionPipeline {
       case RecognitionVerifyTrigger.lowConfidence:
         return RecognitionVerifyReason.lowConfidence;
       case RecognitionVerifyTrigger.emptyTextForTextRegion:
+      case RecognitionVerifyTrigger.compactHandwriting:
         return RecognitionVerifyReason.suspectedMiss;
       case RecognitionVerifyTrigger.nonTextButTextLike:
         return RecognitionVerifyReason.maybeNonText;

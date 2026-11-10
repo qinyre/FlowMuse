@@ -25,9 +25,10 @@ type ProviderImage struct {
 
 // ProviderRequest 是一次模型调用：提示词文本 + 按序附图。
 type ProviderRequest struct {
-	Stage      string // 仅用于耗时日志，不发送给模型。
-	PromptText string
-	Images     []ProviderImage
+	Stage             string
+	IndependentVerify bool // 不携带初读结论的小字重读。
+	PromptText        string
+	Images            []ProviderImage
 }
 
 // RecognitionProvider 是上游模型 seam；测试注入确定性 fake。
@@ -103,9 +104,21 @@ func (p *OpenAICompatProvider) Complete(ctx context.Context, req ProviderRequest
 		},
 	}
 	effort := "default"
-	// 只对已实测支持 minimal 的部署型号启用，不向其他兼容模型强塞参数。
-	if p.model == "doubao-seed-2-1-turbo-260628" {
+	switch p.model {
+	case "doubao-seed-2-1-turbo-260628":
 		effort = "minimal"
+	case "deepseek-v4-flash":
+		switch req.Stage {
+		case StageRead, StageStructure:
+			effort = "none"
+		case StageVerify:
+			effort = "low"
+			if req.IndependentVerify {
+				effort = "none"
+			}
+		}
+	}
+	if effort != "default" {
 		payload["reasoning_effort"] = effort
 	}
 	body, err := json.Marshal(payload)

@@ -10,7 +10,7 @@ library;
 
 class RecognitionBudget {
   const RecognitionBudget({
-    this.overviewMaxEdgePx = 2048,
+    this.overviewMaxEdgePx = 1024,
     this.regionTargetLineHeightMinPx = 48,
     this.regionTargetLineHeightMaxPx = 96,
     this.regionMaxEdgePx = 2048,
