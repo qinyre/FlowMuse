@@ -88,6 +88,12 @@ class SocialRepository {
             'interaction_forbidden',
             '当前关系不允许此操作',
           ),
+          'limit_reached' when method == 'POST' && path == 'devices' =>
+            const SocialException(
+              'limit_reached',
+              '本机协作设备登记受限。请到「好友与消息 → 我的设备安全」检查设备。'
+              '若已满 5 台，可撤销不用的旧设备后重试。若未满，请稍后重试。',
+            ),
           'limit_reached' => const SocialException(
             'limit_reached',
             '操作过于频繁或已达数量上限，请稍后重试',
