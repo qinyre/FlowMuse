@@ -1,4 +1,5 @@
 import '../elements/elements.dart';
+import '../layout/layout.dart';
 import '../math/fractional_index.dart';
 import '../scene/scene.dart';
 
@@ -122,7 +123,9 @@ class LayerUtils {
 
       // Find the next non-selected element above
       var j = i + 1;
-      while (j < ordered.length && ids.contains(ordered[j].id)) {
+      while (j < ordered.length &&
+          (ids.contains(ordered[j].id) ||
+              ordered[j].isForegroundImage != ordered[i].isForegroundImage)) {
         j++;
       }
       if (j >= ordered.length) continue; // already at top
@@ -165,7 +168,9 @@ class LayerUtils {
 
       // Find the next non-selected element below
       var j = i - 1;
-      while (j >= 0 && ids.contains(ordered[j].id)) {
+      while (j >= 0 &&
+          (ids.contains(ordered[j].id) ||
+              ordered[j].isForegroundImage != ordered[i].isForegroundImage)) {
         j--;
       }
       if (j < 0) continue; // already at bottom

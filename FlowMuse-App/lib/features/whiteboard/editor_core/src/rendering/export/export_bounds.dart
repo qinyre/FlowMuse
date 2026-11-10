@@ -17,7 +17,7 @@ class ExportBounds {
     Set<ElementId>? selectedIds,
     double padding = 20.0,
   }) {
-    final elements = _collectElements(scene, selectedIds);
+    final elements = elementsForExport(scene, selectedIds);
     if (elements.isEmpty) return null;
 
     Bounds? result;
@@ -38,7 +38,7 @@ class ExportBounds {
     );
   }
 
-  static List<Element> _collectElements(
+  static List<Element> elementsForExport(
     Scene scene,
     Set<ElementId>? selectedIds,
   ) {
