@@ -142,6 +142,43 @@ class MarkdrawFileHandler {
     }
   }
 
+  /// Saves an already rendered PDF. Returns false if the picker was cancelled.
+  Future<bool> savePdf(Uint8List bytes) async {
+    var title = (controller.documentName ?? '')
+        .trim()
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+        .replaceFirst(RegExp(r'[. ]+$'), '');
+    if (title.isEmpty) title = '笔记';
+    if (RegExp(
+      r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)',
+      caseSensitive: false,
+    ).hasMatch(title)) {
+      title = '_$title';
+    }
+    final name = title.toLowerCase().endsWith('.pdf') ? title : '$title.pdf';
+    if (kIsWeb) {
+      downloadBytes(name, bytes, mimeType: 'application/pdf');
+      return true;
+    }
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      return await saveFileViaOhosChannel(name, bytes, chooseLocation: true) !=
+          null;
+    }
+    final mobile =
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: '导出为 PDF',
+      fileName: name,
+      type: mobile ? FileType.any : FileType.custom,
+      allowedExtensions: mobile ? null : const ['pdf'],
+      bytes: mobile ? bytes : null,
+    );
+    if (path == null) return false;
+    if (!mobile) await writeBytesToFile(path, bytes);
+    return true;
+  }
+
   /// Exports the scene as SVG via a save dialog (or blob download).
   Future<void> exportSvg() async {
     final svg = controller.exportSvg();

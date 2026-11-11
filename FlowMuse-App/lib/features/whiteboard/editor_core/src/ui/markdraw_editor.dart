@@ -41,6 +41,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.openBesideDisabledReason,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportPdf,
     this.onExportSmartMarkdown,
     this.onExportSmartLatex,
     this.onShare,
@@ -126,6 +127,7 @@ class MarkdrawEditor extends StatefulWidget {
   final String? openBesideDisabledReason;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportPdf;
   final VoidCallback? onExportSmartMarkdown;
   final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
@@ -1066,6 +1068,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                               onSaveAs: widget.onSaveAs,
                               onExportPng: widget.onExportPng,
                               onExportSvg: widget.onExportSvg,
+                              onExportPdf: widget.onExportPdf,
                               onExportSmartMarkdown:
                                   widget.onExportSmartMarkdown,
                               onExportSmartLatex: widget.onExportSmartLatex,
@@ -1483,6 +1486,7 @@ class _LeftChrome extends StatelessWidget {
     required this.onSaveAs,
     required this.onExportPng,
     required this.onExportSvg,
+    required this.onExportPdf,
     required this.onExportSmartMarkdown,
     required this.onExportSmartLatex,
     required this.onShare,
@@ -1507,6 +1511,7 @@ class _LeftChrome extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportPdf;
   final VoidCallback? onExportSmartMarkdown;
   final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
@@ -1542,6 +1547,7 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onExportPdf: onExportPdf,
                   onExportSmartMarkdown: onExportSmartMarkdown,
                   onExportSmartLatex: onExportSmartLatex,
                   onShare: onShare,
@@ -1566,6 +1572,7 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onExportPdf: onExportPdf,
                   onExportSmartMarkdown: onExportSmartMarkdown,
                   onExportSmartLatex: onExportSmartLatex,
                   onShare: onShare,

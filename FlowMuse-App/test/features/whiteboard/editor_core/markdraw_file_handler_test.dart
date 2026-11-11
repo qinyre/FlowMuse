@@ -67,6 +67,39 @@ void main() {
     fail = true;
     await expectLater(handler.saveAs(), throwsA(isA<PlatformException>()));
   });
+
+  test('鸿蒙 PDF 使用文档名称和系统保存位置，取消时不报错', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.ohos;
+    controller.renameDocument('课程: 复习');
+    const channel = MethodChannel('flow_muse/file_save');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    String? destination = 'file://docs/Download/notes.pdf';
+    final bytes = Uint8List.fromList(utf8.encode('%PDF-1.5'));
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'saveFile');
+      expect(call.arguments, {
+        'fileName': '课程_ 复习.pdf',
+        'bytes': bytes,
+        'chooseLocation': true,
+      });
+      return destination;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    expect(await handler.savePdf(bytes), isTrue);
+    destination = null;
+    expect(await handler.savePdf(bytes), isFalse);
+  });
+
+  test('安卓将 PDF 字节交给系统保存选择器', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final picker = _SavePicker();
+    FilePicker.platform = picker;
+    final bytes = Uint8List.fromList(utf8.encode('%PDF-1.5'));
+    expect(await handler.savePdf(bytes), isTrue);
+    expect(picker.fileName, '笔记.pdf');
+    expect(picker.bytes, bytes);
+  });
 }
 
 class _SavePicker extends FilePicker {
