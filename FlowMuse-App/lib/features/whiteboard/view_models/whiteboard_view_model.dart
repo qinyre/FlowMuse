@@ -160,6 +160,7 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   Future<void> startCollaboration({
     required ExcalidrawScene initialScene,
     int maxParticipants = 0,
+    List<String> fileUploadPriority = const [],
   }) async {
     state = state.copyWith(
       collaborationStatus: WhiteboardCollaborationStatus.connecting,
@@ -169,6 +170,7 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       final room = await _repository.startNewRoom(
         initialScene: initialScene,
         maxParticipants: maxParticipants,
+        fileUploadPriority: fileUploadPriority,
       );
       state = state.copyWith(
         activeRoom: room,

@@ -19,6 +19,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_file_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
@@ -1720,6 +1721,152 @@ void main() {
     });
   }
 
+  testWidgets('从已有多页 PDF 开房，首屏与跳页无需等待慢图', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final source = MarkdrawController();
+    addTearDown(source.dispose);
+    await tester.runAsync(() async {
+      final pages = <PdfRenderedPage>[];
+      for (var page = 1; page <= 4; page++) {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawColor(Color(0xff000000 + page), BlendMode.src);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(2, 2);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        picture.dispose();
+        pages.add(
+          PdfRenderedPage(
+            bytes: bytes!.buffer.asUint8List(),
+            mimeType: 'image/png',
+            width: 600,
+            height: 800,
+            pageNumber: page,
+          ),
+        );
+      }
+      await source.importPdfPages(
+        pages,
+        const Size(1200, 900),
+        asBackground: true,
+      );
+    });
+    final ids = source.currentScene.elements
+        .whereType<ImageElement>()
+        .map((image) => image.fileId)
+        .toList();
+    expect(ids.toSet(), hasLength(4));
+    final files = _DelayedPdfRoomFiles(ids[1], failOnceId: ids.last);
+    final store = _MemberJoinSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final host = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pdf-host'),
+      sceneStore: store,
+      fileStore: files,
+    );
+    final guest = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pdf-guest'),
+      sceneStore: store,
+      fileStore: files,
+    );
+    addTearDown(host.stop);
+    addTearDown(guest.stop);
+    final room = (await tester.runAsync(
+      () => host.startNewRoom(
+        initialScene: WhiteboardCollaborationAdapter(source).currentScene(),
+      ),
+    ))!;
+    final container = _container(library: library, collaboration: guest);
+    final before = (await tester.runAsync(
+      library.loadIndex,
+    ))!.notes.map((note) => note.id).toSet();
+    final router = GoRouter(
+      initialLocation: '/room',
+      routes: [
+        GoRoute(path: '/library', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(
+          path: '/room',
+          builder: (_, _) =>
+              WhiteboardPage.collaborationRoom(initialRoom: room),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    final controller = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .controller!;
+    await _drainIo(
+      tester,
+      container,
+      until: () => controller.currentScene.files.containsKey(ids.first),
+    );
+    expect(controller.layout.pages, hasLength(4));
+    expect(files.uploaded.keys, [ids.first]);
+    expect(controller.currentScene.files.keys, [ids.first]);
+
+    files.releaseUpload.complete();
+    await _drainIo(
+      tester,
+      container,
+      until: () => files.requested.contains(ids[1]),
+    );
+    expect(files.requested, isNot(contains(ids.last)));
+    controller.navigateToPage(controller.layout.pages.last.id, fit: true);
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.text('当前页面的图片加载失败').evaluate().isNotEmpty,
+    );
+    expect(
+      controller.currentScene.elements
+          .whereType<ImageElement>()
+          .singleWhere((image) => image.fileId == ids.last)
+          .status,
+      'saved',
+    );
+    await tester.tap(find.text('重试'));
+    await _drainIo(
+      tester,
+      container,
+      until: () => controller.currentScene.files.containsKey(ids.last),
+    );
+    expect(controller.currentScene.files, isNot(contains(ids[1])));
+    final leave = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onLeaveCollaboration!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存到本地'));
+    await tester.pump();
+    expect(
+      (await tester.runAsync(
+        library.loadIndex,
+      ))!.notes.map((note) => note.id).toSet(),
+      before,
+    );
+    files.releaseDownload.complete();
+    await _drainIo(
+      tester,
+      container,
+      until: () => router.routeInformationProvider.value.uri.path == '/library',
+    );
+    await leave;
+    final notes = (await tester.runAsync(library.loadIndex))!.notes;
+    final saved = notes.singleWhere((note) => !before.contains(note.id));
+    final content = (await tester.runAsync(() => scenes.loadScene(saved.id)))!;
+    expect(
+      ((jsonDecode(content) as Map)['files'] as Map).keys.toSet(),
+      ids.toSet(),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
   for (final (template, resetFirst) in [
     (CanvasPageTemplate.blank, false),
     (CanvasPageTemplate.grid, false),
@@ -2686,6 +2833,65 @@ class _MemberJoinSceneStore extends MemoryEncryptedSceneStore {
         role: CollaborationRoomRole.editor,
         ended: false,
       );
+}
+
+class _DelayedPdfRoomFiles implements CollaborationFileStore {
+  _DelayedPdfRoomFiles(this.slowId, {required this.failOnceId});
+
+  final String slowId;
+  final String failOnceId;
+  final releaseUpload = Completer<void>();
+  final releaseDownload = Completer<void>();
+  final uploaded = <String, ImageFile>{};
+  final requested = <String>[];
+
+  @override
+  Future<CollaborationFileUploadResult> uploadFiles({
+    required String roomId,
+    required String roomKey,
+    required Map<String, Object?> filesJson,
+    required Iterable<String> fileIds,
+  }) async {
+    final saved = <String, Map<String, Object?>>{};
+    for (final id in fileIds) {
+      if (id == slowId) await releaseUpload.future;
+      final file = filesJson[id]! as Map<String, Object?>;
+      uploaded[id] = ImageFile(
+        mimeType: 'image/png',
+        bytes: base64Decode((file['dataURL']! as String).split(',').last),
+      );
+      saved[id] = file;
+    }
+    return CollaborationFileUploadResult(
+      savedFiles: saved,
+      erroredFiles: const {},
+    );
+  }
+
+  @override
+  Future<CollaborationFileLoadResult> loadFiles({
+    required String roomId,
+    required String roomKey,
+    required Iterable<String> fileIds,
+  }) async {
+    final loaded = <String, ImageFile>{};
+    final errors = <String>{};
+    for (final id in fileIds) {
+      final fail = id == failOnceId && !requested.contains(id);
+      requested.add(id);
+      if (id == slowId) await releaseDownload.future;
+      final file = uploaded[id];
+      if (file == null || fail) {
+        errors.add(id);
+      } else {
+        loaded[id] = file;
+      }
+    }
+    return CollaborationFileLoadResult(
+      loadedFiles: loaded,
+      erroredFileIds: errors,
+    );
+  }
 }
 
 class _TrackedCollaborationRepository extends CollaborationRepository {

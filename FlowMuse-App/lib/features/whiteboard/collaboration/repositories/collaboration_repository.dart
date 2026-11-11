@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 
 import '../../editor_core/src/core/serialization/canonical_json.dart';
+import '../../editor_core/src/core/elements/image_file.dart';
 
 import '../models/collaboration_message.dart';
 import '../config/live_ink_flags.dart';
@@ -69,7 +70,7 @@ class CollaborationRepository {
   final CollaborationPerformanceProbe? _performanceProbe;
   final LiveInkFlags flags;
   final ChangeAccumulator _accumulator;
-  final CollaborationFileManager _fileManager = CollaborationFileManager();
+  CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
   final Map<String, _VersionRecord> _broadcastedElementVersions = {};
   final Map<String, Map<String, Object?>> _pendingLatestElements = {};
@@ -79,14 +80,17 @@ class CollaborationRepository {
       StreamController<RealtimeConnectionStatus>.broadcast();
   final StreamController<CollaborationMessage> _messages =
       StreamController<CollaborationMessage>.broadcast();
-  final StreamController<ExcalidrawScene> _fileStatusScenes =
-      StreamController<ExcalidrawScene>.broadcast();
+  final _fileStatusUpdates =
+      StreamController<List<Map<String, Object?>>>.broadcast();
   final StreamController<DecodedLiveInkChunk> _liveInkChunks =
       StreamController<DecodedLiveInkChunk>.broadcast();
   final List<CollaborationMessage> _messageBacklog = [];
 
   Timer? _fullSceneSyncTimer;
   Timer? _fileUploadTimer;
+  bool _fileUploadRunning = false;
+  bool _fileUploadRequested = false;
+  List<String> _fileUploadPriority = const [];
   Timer? _snapshotTimer;
   bool _snapshotSaving = false;
   bool _snapshotDirty = false;
@@ -605,11 +609,13 @@ class CollaborationRepository {
     });
   }
 
-  Stream<ExcalidrawScene> get fileStatusScenes => _fileStatusScenes.stream;
+  Stream<List<Map<String, Object?>>> get fileStatusUpdates =>
+      _fileStatusUpdates.stream;
 
   Future<CollaborationRoom> startNewRoom({
     required ExcalidrawScene initialScene,
     int maxParticipants = 0,
+    List<String> fileUploadPriority = const [],
   }) async {
     if (maxParticipants != 0 && (maxParticipants < 2 || maxParticipants > 50)) {
       throw ArgumentError.value(maxParticipants, 'maxParticipants');
@@ -633,6 +639,7 @@ class CollaborationRepository {
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
     _latestScene = syncableScene;
+    _fileUploadPriority = fileUploadPriority;
     _broadcastedElementVersions.clear();
     _rememberBroadcasted(syncableScene.elements);
     CollaborationDebugLog.write('repo', 'start_room', {
@@ -1158,9 +1165,7 @@ class CollaborationRepository {
   }) async {
     final ids = {
       for (final fileId in fileIds)
-        if (!existingFileIds.contains(fileId) &&
-            !_fileManager.isFileTracked(fileId))
-          fileId,
+        if (!existingFileIds.contains(fileId)) fileId,
     };
     final files = await _fileManager.getFiles(
       fileStore: _fileStore,
@@ -1168,18 +1173,8 @@ class CollaborationRepository {
       roomKey: room.roomKey,
       fileIds: ids,
     );
-    final encoded = <String, dynamic>{};
-    for (final entry in files.loadedFiles.entries) {
-      encoded[entry.key] = {
-        'mimeType': entry.value.mimeType,
-        'id': entry.key,
-        'dataURL':
-            'data:${entry.value.mimeType};base64,${base64Encode(entry.value.bytes)}',
-        'created': DateTime.now().millisecondsSinceEpoch,
-      };
-    }
     return CollaborationLoadedFilesResult(
-      files: encoded,
+      files: files.loadedFiles,
       erroredFileIds: files.erroredFileIds,
     );
   }
@@ -1584,35 +1579,52 @@ class CollaborationRepository {
   }
 
   Future<void> _flushQueuedFileUpload(CollaborationRoom room) async {
-    if (_activeRoom?.roomId != room.roomId) {
+    final generation = _roomSessionGeneration;
+    bool isCurrent() => _isCurrentRoomSession(room, generation);
+    if (!isCurrent()) return;
+    if (_fileUploadRunning) {
+      _fileUploadRequested = true;
       return;
     }
+    _fileUploadRunning = true;
     try {
-      final result = await _fileManager.saveFiles(
+      await _fileManager.saveFiles(
         fileStore: _fileStore,
         roomId: room.roomId,
         roomKey: room.roomKey,
         elements: _latestScene.elements,
         filesJson: _latestScene.files,
+        priority: _fileUploadPriority,
+        isCurrent: isCurrent,
+        onFileSettled: (result) {
+          final before = _latestScene;
+          final after = _updateImageStatuses(
+            before,
+            savedFileIds: result.savedFileIds,
+            erroredFileIds: result.erroredFileIds,
+          );
+          if (identical(before, after)) return;
+          final updates = [
+            for (var i = 0; i < after.elements.length; i++)
+              if (!identical(after.elements[i], before.elements[i]))
+                after.elements[i],
+          ];
+          if (!_fileStatusUpdates.isClosed) _fileStatusUpdates.add(updates);
+          unawaited(broadcastElements(room: room, elements: updates));
+        },
       );
-      if (result.savedFileIds.isEmpty && result.erroredFileIds.isEmpty) {
-        return;
+    } catch (_) {
+      if (isCurrent()) {
+        _addRepositoryError('图片文件同步失败，图形和文字会继续同步');
       }
-      final nextScene = _updateImageStatuses(
-        _latestScene,
-        savedFileIds: result.savedFileIds,
-        erroredFileIds: result.erroredFileIds,
-      );
-      if (identical(nextScene, _latestScene)) {
-        return;
+    } finally {
+      if (isCurrent()) {
+        _fileUploadRunning = false;
+        if (_fileUploadRequested) {
+          _fileUploadRequested = false;
+          _scheduleFileUpload(room);
+        }
       }
-      _latestScene = nextScene;
-      if (!_fileStatusScenes.isClosed) {
-        _fileStatusScenes.add(nextScene);
-      }
-      unawaited(broadcastScene(room: room, scene: nextScene));
-    } catch (error) {
-      _addRepositoryError('图片文件同步失败，图形和文字会继续同步：$error');
     }
   }
 
@@ -1787,7 +1799,7 @@ class CollaborationRepository {
     required Set<String> erroredFileIds,
     required void Function() onChanged,
   }) {
-    if (element['type'] != 'image') {
+    if (element['type'] != 'image' || element['isDeleted'] == true) {
       return element;
     }
     final fileId = element['fileId'];
@@ -1892,7 +1904,10 @@ class CollaborationRepository {
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
     _pendingLatestElements.clear();
-    _fileManager.reset();
+    _fileManager = CollaborationFileManager();
+    _fileUploadRunning = false;
+    _fileUploadRequested = false;
+    _fileUploadPriority = const [];
     _accumulator.dispose();
     _sendGeneration++;
     _latestSendQueued = false;
@@ -1913,6 +1928,6 @@ class CollaborationLoadedFilesResult {
     required this.erroredFileIds,
   });
 
-  final Map<String, dynamic> files;
+  final Map<String, ImageFile> files;
   final Set<String> erroredFileIds;
 }
