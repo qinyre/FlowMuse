@@ -3,33 +3,19 @@ import 'collaboration_debug_log.dart';
 import 'collaboration_file_store.dart';
 
 class CollaborationFileManager {
-  final Map<String, bool> _fetchingFiles = {};
-  final Map<String, bool> _erroredFilesFetch = {};
-  final Map<String, int> _savingFiles = {};
   final Map<String, int> _savedFiles = {};
-  final Map<String, int> _erroredFilesSave = {};
 
-  bool isFileTracked(String id) {
-    return _savedFiles.containsKey(id) ||
-        _savingFiles.containsKey(id) ||
-        _fetchingFiles.containsKey(id) ||
-        _erroredFilesFetch.containsKey(id) ||
-        _erroredFilesSave.containsKey(id);
-  }
-
-  Future<CollaborationFileSaveResult> saveFiles({
+  Future<void> saveFiles({
     required CollaborationFileStore? fileStore,
     required String roomId,
     required String roomKey,
     required List<Map<String, Object?>> elements,
     required Map<String, Object?> filesJson,
+    required List<String> priority,
+    required bool Function() isCurrent,
+    required void Function(CollaborationFileSaveResult) onFileSettled,
   }) async {
-    if (fileStore == null) {
-      return const CollaborationFileSaveResult(
-        savedFileIds: {},
-        erroredFileIds: {},
-      );
-    }
+    if (fileStore == null) return;
 
     final addedFiles = <String, Map<String, Object?>>{};
     for (final element in elements) {
@@ -42,50 +28,31 @@ class CollaborationFileManager {
         continue;
       }
       final fileJson = Map<String, Object?>.from(file);
-      if (isFileSavedOrBeingSaved(fileId, fileJson)) {
+      if (_savedFiles[fileId] == _fileVersion(fileJson)) {
         continue;
       }
       addedFiles[fileId] = fileJson;
-      _savingFiles[fileId] = getFileVersion(fileJson);
     }
 
-    if (addedFiles.isEmpty) {
-      return const CollaborationFileSaveResult(
-        savedFileIds: {},
-        erroredFileIds: {},
-      );
-    }
-
-    CollaborationDebugLog.write('file_manager', 'save_enqueue', {
-      'room': _shortRoomId(roomId),
-      'files': addedFiles.keys.map(_shortFileId).toList(),
-    });
-    try {
+    for (final fileId in {...priority, ...addedFiles.keys}) {
+      if (!isCurrent()) return;
+      final file = addedFiles[fileId];
+      if (file == null) continue;
       final result = await fileStore.uploadFiles(
         roomId: roomId,
         roomKey: roomKey,
-        filesJson: filesJson,
-        fileIds: addedFiles.keys,
+        filesJson: {fileId: file},
+        fileIds: [fileId],
       );
-      for (final entry in result.savedFiles.entries) {
-        _savedFiles[entry.key] = getFileVersion(entry.value);
-      }
-      for (final entry in result.erroredFiles.entries) {
-        _erroredFilesSave[entry.key] = getFileVersion(entry.value);
-      }
-      CollaborationDebugLog.write('file_manager', 'save_result', {
-        'room': _shortRoomId(roomId),
-        'saved': result.savedFiles.keys.map(_shortFileId).toList(),
-        'errored': result.erroredFiles.keys.map(_shortFileId).toList(),
-      });
-      return CollaborationFileSaveResult(
-        savedFileIds: result.savedFiles.keys.toSet(),
-        erroredFileIds: result.erroredFiles.keys.toSet(),
+      if (!isCurrent()) return;
+      final saved = result.savedFiles.containsKey(fileId);
+      if (saved) _savedFiles[fileId] = _fileVersion(file);
+      onFileSettled(
+        CollaborationFileSaveResult(
+          savedFileIds: saved ? {fileId} : const {},
+          erroredFileIds: saved ? const {} : {fileId},
+        ),
       );
-    } finally {
-      for (final fileId in addedFiles.keys) {
-        _savingFiles.remove(fileId);
-      }
     }
   }
 
@@ -108,71 +75,31 @@ class CollaborationFileManager {
         erroredFileIds: {},
       );
     }
-    for (final id in ids) {
-      _fetchingFiles[id] = true;
-    }
     CollaborationDebugLog.write('file_manager', 'fetch_enqueue', {
       'room': _shortRoomId(roomId),
       'files': ids.map(_shortFileId).toList(),
     });
-    try {
-      final result = await fileStore.loadFiles(
-        roomId: roomId,
-        roomKey: roomKey,
-        fileIds: ids,
-      );
-      for (final fileId in result.loadedFiles.keys) {
-        _savedFiles[fileId] = 1;
-      }
-      for (final fileId in result.erroredFileIds) {
-        _erroredFilesFetch[fileId] = true;
-      }
-      CollaborationDebugLog.write('file_manager', 'fetch_result', {
-        'room': _shortRoomId(roomId),
-        'loaded': result.loadedFiles.keys.map(_shortFileId).toList(),
-        'errored': result.erroredFileIds.map(_shortFileId).toList(),
-      });
-      return CollaborationFileFetchResult(
-        loadedFiles: result.loadedFiles,
-        erroredFileIds: result.erroredFileIds,
-      );
-    } finally {
-      for (final id in ids) {
-        _fetchingFiles.remove(id);
-      }
+    final result = await fileStore.loadFiles(
+      roomId: roomId,
+      roomKey: roomKey,
+      fileIds: ids,
+    );
+    for (final fileId in result.loadedFiles.keys) {
+      _savedFiles[fileId] = 1;
     }
-  }
-
-  bool shouldUpdateImageElementStatus(Map<String, Object?> element) {
-    final fileId = _imageFileId(element);
-    return fileId != null &&
-        _savedFiles.containsKey(fileId) &&
-        element['status'] == 'pending';
-  }
-
-  bool isFileSavedOrBeingSaved(String fileId, Map<String, Object?> fileJson) {
-    final fileVersion = getFileVersion(fileJson);
-    return _savedFiles[fileId] == fileVersion ||
-        _savingFiles[fileId] == fileVersion;
-  }
-
-  int getFileVersion(Map<String, Object?> fileJson) {
-    return (fileJson['version'] as num?)?.toInt() ?? 1;
-  }
-
-  void reset() {
-    CollaborationDebugLog.write('file_manager', 'reset', {
-      'saving': _savingFiles.length,
-      'saved': _savedFiles.length,
-      'fetching': _fetchingFiles.length,
-      'saveErrors': _erroredFilesSave.length,
-      'fetchErrors': _erroredFilesFetch.length,
+    CollaborationDebugLog.write('file_manager', 'fetch_result', {
+      'room': _shortRoomId(roomId),
+      'loaded': result.loadedFiles.keys.map(_shortFileId).toList(),
+      'errored': result.erroredFileIds.map(_shortFileId).toList(),
     });
-    _fetchingFiles.clear();
-    _savingFiles.clear();
-    _savedFiles.clear();
-    _erroredFilesFetch.clear();
-    _erroredFilesSave.clear();
+    return CollaborationFileFetchResult(
+      loadedFiles: result.loadedFiles,
+      erroredFileIds: result.erroredFileIds,
+    );
+  }
+
+  int _fileVersion(Map<String, Object?> fileJson) {
+    return (fileJson['version'] as num?)?.toInt() ?? 1;
   }
 
   String? _imageFileId(Map<String, Object?> element) {

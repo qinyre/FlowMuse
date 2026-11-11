@@ -3852,7 +3852,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Applies collaboration element updates without rebuilding the full scene.
-  void applyRemoteElements(Iterable<Element> elements) {
+  void applyRemoteElements(
+    Iterable<Element> elements, {
+    bool notifySceneChange = true,
+  }) {
     final updates = [
       for (final element in elements)
         if (element is TextElement && element.containerId == null)
@@ -3870,7 +3873,9 @@ class MarkdrawController extends ChangeNotifier {
       _applyViewportConstraints();
     }
     _lastChangedElements = null;
-    _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
+    if (notifySceneChange) {
+      _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
+    }
     if (updates.every(
           (element) => element is FreedrawElement && !element.isCanvasPage,
         ) &&
@@ -3881,6 +3886,19 @@ class MarkdrawController extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+  }
+
+  /// Attaches downloaded files without replacing elements or resetting the view.
+  void applyRemoteImageFiles(Map<String, ImageFile> files) {
+    if (files.isEmpty) return;
+    _historyManager.recordRemoteFiles(files);
+    var scene = _editorState.scene;
+    for (final entry in files.entries) {
+      scene = scene.addFile(entry.key, entry.value);
+    }
+    _editorState = _editorState.copyWith(scene: scene);
+    _notifySceneChanged(scene, SceneChangeSource.remoteApply);
+    notifyListeners();
   }
 
   /// Clears the scene and undo history.
