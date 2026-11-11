@@ -10,6 +10,8 @@ import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/region_capture_overlay.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
@@ -392,6 +394,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(citation, findsOneWidget);
     expect(tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder, isNull);
+  });
+
+  testWidgets('AI 助手打开后翻到第二页，确认写入采用当前页', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'AI 当前页', noteType: NoteType.paged),
+    ))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    controller.insertBlankPage();
+    await tester.pumpAndSettle();
+    final first = controller.layout.pages.first;
+    final second = controller.layout.pages.last;
+    expect(controller.navigateToPage(first.id, fit: true), isTrue);
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
+    await tester.pumpAndSettle();
+    expect(controller.navigateToPage(second.id, fit: true), isTrue);
+    await tester.pumpAndSettle();
+    final assistant = tester.widget<AiAgentPanel>(find.byType(AiAgentPanel));
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+    await assistant.onApply(
+      AiAgentResponse(
+        message: '准备写入第二页',
+        actions: [
+          AiAgentAction.edited(tool: AiAgentTool.insertText, value: '第二页笔记'),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    final text = controller.currentScene.activeElements
+        .whereType<TextElement>()
+        .single;
+    expect(text.pageId, second.id);
+    expect(second.bounds.contains(Offset(text.x, text.y)), isTrue);
+    controller.undo();
+    await tester.pumpAndSettle();
+    expect(
+      controller.currentScene.activeElements.whereType<TextElement>(),
+      isEmpty,
+    );
+    expect(controller.layout.pages, hasLength(2));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
   });
 
   testWidgets('笔记 Agent 确认后追加多页整理稿，一次撤销且保留原稿和会话', (tester) async {
