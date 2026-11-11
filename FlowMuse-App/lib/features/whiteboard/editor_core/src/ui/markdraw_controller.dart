@@ -4262,10 +4262,7 @@ class MarkdrawController extends ChangeNotifier {
     ];
     if (normalized.isEmpty) return;
 
-    final targetSize =
-        canvasSize ??
-        _lastCanvasSize ??
-        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
+    final targetSize = _insertionCanvasSize(canvasSize);
 
     final centerScene = _editorState.viewport.screenToScene(
       Offset(targetSize.width / 2, targetSize.height / 2),
@@ -4369,12 +4366,21 @@ class MarkdrawController extends ChangeNotifier {
       y += sized.height + 24;
     }
 
+    final first = elements.first;
+    final visible = _editorState.viewport.visibleRect(targetSize);
+    final reveal =
+        adaptiveLayout &&
+            _layout.isPaged &&
+            !_rectContainsElement(visible, first)
+        ? UpdateViewportResult(_viewportCenteredOn(first, targetSize))
+        : null;
     _historyManager.push(_editorState.scene);
     applyResult(
       CompoundResult([
         for (final page in pageElements) AddElementResult(page),
         for (final element in elements) AddElementResult(element),
         SetSelectionResult({for (final element in elements) element.id}),
+        ?reveal,
       ]),
     );
   }
@@ -4567,16 +4573,27 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
+  Size _insertionCanvasSize(Size? override) =>
+      override ??
+      (_canvasSize.isEmpty
+          ? _lastCanvasSize ?? const Size(800, 600)
+          : _canvasSize);
+
   List<({Rect rect, String? pageId})> _adaptiveTextInsertionAreas(
     Size canvasSize,
   ) {
     final visible = _editorState.viewport.visibleRect(canvasSize);
     if (_layout.isPaged) {
-      final page = pageForVisibleRect(visible);
+      final index = canvasSize == _canvasSize
+          ? pagedViewportMetrics?.currentPageIndex
+          : null;
+      final page = index == null
+          ? pageForVisibleRect(visible)
+          : _layout.pages[index];
       if (page != null) {
-        final index = _layout.pages.indexWhere((item) => item.id == page.id);
+        final start = index ?? _layout.pages.indexOf(page);
         return [
-          for (final item in _layout.pages.skip(math.max(index, 0)))
+          for (final item in _layout.pages.skip(start))
             (rect: item.bounds.deflate(72), pageId: item.id),
         ];
       }
@@ -5078,10 +5095,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Inserts a complete content tree using the deterministic mind-map layout.
   /// The whole tree is one scene change and can be removed with one undo.
   void insertMindmap(MindmapNode tree, {Size? canvasSize}) {
-    final targetSize =
-        canvasSize ??
-        _lastCanvasSize ??
-        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
+    final targetSize = _insertionCanvasSize(canvasSize);
     final visible = _editorState.viewport.visibleRect(targetSize);
     final preview = MindmapLayout.treeToElements(
       tree,

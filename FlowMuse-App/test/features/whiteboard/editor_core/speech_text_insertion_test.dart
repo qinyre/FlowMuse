@@ -82,6 +82,61 @@ void main() {
     expect(controller.editorState.scene.activeElements, isEmpty);
   });
 
+  test('AI 写入跟随实际画布页码，不受助手侧栏尺寸影响', () {
+    const first = CanvasPage(
+      id: 'page-1',
+      index: 0,
+      bounds: Rect.fromLTWH(0, 0, 600, 800),
+      template: CanvasPageTemplate.blank,
+      pageFlow: CanvasPageFlow.rightToLeft,
+    );
+    const second = CanvasPage(
+      id: 'page-2',
+      index: 1,
+      bounds: Rect.fromLTWH(-640, 0, 600, 800),
+      template: CanvasPageTemplate.blank,
+      pageFlow: CanvasPageFlow.rightToLeft,
+    );
+    final controller = MarkdrawController()
+      ..setLayout(
+        const CanvasLayout(
+          type: CanvasLayoutType.paged,
+          pageFlow: CanvasPageFlow.rightToLeft,
+          pages: [first, second],
+        ),
+      )
+      ..lastCanvasSize = const Size(1400, 600)
+      ..canvasSize = const Size(400, 360)
+      ..setViewport(const ViewportState(offset: Offset(-500, 420), zoom: 1));
+    addTearDown(controller.dispose);
+    expect(controller.pagedViewportMetrics!.currentPageIndex, 1);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+
+    controller.insertPlainTexts(['AI 第二页内容'], adaptiveLayout: true);
+
+    final text = controller.currentScene.activeElements
+        .whereType<TextElement>()
+        .single;
+    expect(text.pageId, second.id);
+    final visible = controller.editorState.viewport.visibleRect(
+      controller.canvasSize,
+    );
+    expect(
+      visible.overlaps(Rect.fromLTWH(text.x, text.y, text.width, text.height)),
+      isTrue,
+    );
+    expect(controller.pagedViewportMetrics!.currentPageIndex, 1);
+    controller.undo();
+    expect(
+      controller.currentScene.activeElements.whereType<TextElement>(),
+      isEmpty,
+    );
+    expect(controller.layout.pages.map((page) => page.id), [
+      first.id,
+      second.id,
+    ]);
+  });
+
   test('AI 超高文本拆分到新增页面且仍可一次撤销', () {
     final controller = MarkdrawController(
       config: MarkdrawEditorConfig(
