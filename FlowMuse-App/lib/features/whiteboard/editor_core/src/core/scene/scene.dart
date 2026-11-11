@@ -55,14 +55,20 @@ class Scene {
 
   late final ({List<Element> content, List<Element> images}) _canvasLayers =
       () {
+        final backgrounds = <Element>[];
         final content = <Element>[];
         final images = <Element>[];
         for (final element in orderedElements) {
           if (element.isDeleted) continue;
-          (element.isForegroundImage ? images : content).add(element);
+          if (element.isPdfBackground) {
+            backgrounds.add(element);
+          } else {
+            (element.isForegroundImage ? images : content).add(element);
+          }
         }
         return (
-          content: List<Element>.unmodifiable(content),
+          // Legacy collaboration indices must not put PDF images above ink.
+          content: List<Element>.unmodifiable([...backgrounds, ...content]),
           images: List<Element>.unmodifiable(images),
         );
       }();

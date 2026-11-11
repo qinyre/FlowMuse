@@ -1,4 +1,5 @@
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/fractional_index.dart';
 
 import 'collaboration_debug_log.dart';
 
@@ -61,26 +62,22 @@ class SceneReconciler {
   List<Map<String, Object?>> _ensureUniqueIndices(
     List<Map<String, Object?>> elements,
   ) {
-    final seen = <String>{};
-    var nextFallbackIndex = 0;
-    return [
-      for (final element in elements)
-        _withValidIndex(element, seen, nextFallbackIndex++),
-    ];
-  }
-
-  Map<String, Object?> _withValidIndex(
-    Map<String, Object?> element,
-    Set<String> seen,
-    int fallbackIndex,
-  ) {
-    final index = _fractionalIndex(element);
-    if (index != null && index.isNotEmpty && seen.add(index)) {
-      return element;
+    final output = <Map<String, Object?>>[];
+    String? previousIndex;
+    for (final element in elements) {
+      final index = _fractionalIndex(element);
+      if (index != null &&
+          (previousIndex == null || index.compareTo(previousIndex) > 0)) {
+        output.add(element);
+        previousIndex = index;
+      } else {
+        // Preserve the merged order, including successors of duplicate indices.
+        final repairedIndex = FractionalIndex.generateAfter(previousIndex);
+        output.add({...element, 'index': repairedIndex});
+        previousIndex = repairedIndex;
+      }
     }
-    final fallback = fallbackIndex.toString().padLeft(8, '0');
-    seen.add(fallback);
-    return {...element, 'index': fallback};
+    return output;
   }
 
   List<Map<String, Object?>> getSyncableElements(
@@ -212,8 +209,10 @@ class SceneReconciler {
   int _updatedAt(Map<String, Object?> element) =>
       (element['updated']! as num).toInt();
 
-  String? _fractionalIndex(Map<String, Object?> element) =>
-      element['index'] as String?;
+  String? _fractionalIndex(Map<String, Object?> element) {
+    final index = element['index'] as String?;
+    return index == null || index.isEmpty ? null : index;
+  }
 
   bool _isDeleted(Map<String, Object?> element) =>
       element['isDeleted']! as bool;
