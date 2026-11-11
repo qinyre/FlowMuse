@@ -49,7 +49,10 @@ void main() {
     pageId: 'page-1',
   );
 
-  RecognitionPipeline pipelineOf(FakeRecognitionTransport transport) {
+  RecognitionPipeline pipelineOf(
+    FakeRecognitionTransport transport, {
+    RecognitionStructureRecoverer? structureRecoverer,
+  }) {
     return RecognitionPipeline(
       repository: RecognitionRepository(
         gateway: SmartLayoutHttpGateway(
@@ -57,12 +60,63 @@ void main() {
           post: transport.post,
         ),
       ),
+      structureRecoverer: structureRecoverer,
     );
   }
 
   Scene twoRegionScene() => Scene()
       .addElement(stroke('s1', 10, 20))
       .addElement(stroke('s2', 10, 120));
+
+  test('对齐的两行短手写只发一次初读请求，按本地顺序排版', () async {
+    final strokes = [stroke('s1', 10, 20), stroke('s2', 12, 38)];
+    final scene = Scene().addElement(strokes.first).addElement(strokes.last);
+    final transport = FakeRecognitionTransport(
+      responder: (body) async {
+        final request = jsonDecode(body) as Map<String, Object?>;
+        expect(request['stage'], 'read');
+        return buildBatchResponseBody(
+          request,
+          textOf: (id) => id == 'r:s1' ? '植物生长' : '光照和水分',
+        );
+      },
+    );
+    final pipeline = RecognitionPipeline(
+      repository: RecognitionRepository(
+        gateway: SmartLayoutHttpGateway(
+          serverUri: Uri.parse('https://server.test'),
+          post: transport.post,
+        ),
+      ),
+      structureRecoverer: const StructureRecovery(),
+    );
+    final result = await pipeline.run(
+      captureOf(scene),
+      correctedPartitions: [
+        for (final stroke in strokes)
+          RegionPartition(
+            strokes: [stroke],
+            record: RegionRecord(
+              regionId: 'r:${stroke.id.value}',
+              targetSourceIds: [stroke.id.value],
+              localLineHeight: 8,
+              bounds: RecognitionBounds(
+                left: stroke.x,
+                top: stroke.y,
+                width: stroke.width,
+                height: stroke.height,
+              ),
+            ),
+          ),
+      ],
+    );
+    expect(transport.requests, hasLength(1));
+    expect(result.partial, isFalse);
+    final structure = result.structureResult as StructureResult;
+    expect(structure.usedModel, isFalse);
+    expect(structure.readingOrder, ['ink:r:s1', 'ink:r:s2']);
+    expect(structure.units.map((unit) => unit.text), ['植物生长', '光照和水分']);
+  });
 
   test('总预算在渲染前耗尽：不出图、不发请求、全部源保留', () async {
     final transport = FakeRecognitionTransport();
@@ -92,6 +146,119 @@ void main() {
     expect(result.ledger.preservedCount, 2);
     expect(result.ledger.entryOf('s1').reason, SourcePreserveReason.uncertain);
   });
+
+  for (final mode in ['首次确认', '初读漏答', '复核漏答', '复核不确定', '补读低置信']) {
+    test('高置信小字独立重读和漏识别补救（$mode）', () async {
+      var scene = Scene();
+      final partitions = <RegionPartition>[];
+      for (var row = 0; row < 5; row++) {
+        final y = 100.0 * row;
+        final strokes = [
+          for (var i = 0; i < 18; i++)
+            stroke('row-$row-$i', 10 + i * 9.0, y + i % 3 * 8),
+        ];
+        for (final element in strokes) {
+          scene = scene.addElement(element);
+        }
+        partitions.add(
+          RegionPartition(
+            strokes: strokes,
+            record: RegionRecord(
+              regionId: 'r:row-$row',
+              targetSourceIds: strokes.map((s) => s.id.value).toList(),
+              localLineHeight: 25,
+              bounds: RecognitionBounds(
+                left: 10,
+                top: y,
+                width: 220,
+                height: row == 4 ? 48 : 75,
+              ),
+            ),
+          ),
+        );
+      }
+      var verifies = 0;
+      final transport = FakeRecognitionTransport(
+        responder: (body) async {
+          final req = jsonDecode(body) as Map<String, Object?>;
+          if (req['stage'] == 'verify') {
+            verifies++;
+            if (verifies == 1 && (mode == '复核漏答' || mode == '补读低置信')) {
+              return buildBatchResponseBody(req, missingRegionIds: {'r:row-4'});
+            }
+            if (verifies == 1 && mode == '复核不确定') {
+              return buildBatchResponseBody(
+                req,
+                textOf: (_) => '不完整',
+                statusOf: (_) => 'uncertain',
+              );
+            }
+            return buildBatchResponseBody(
+              req,
+              textOf: (_) => '复核正文',
+              confidence: mode == '补读低置信' ? .7 : .95,
+            );
+          }
+          final omitted =
+              mode == '初读漏答' &&
+              (req['regions'] as List).any(
+                (region) => region['regionId'] == 'r:row-4',
+              );
+          return buildBatchResponseBody(
+            req,
+            confidence: .99,
+            textOf: (_) => '初读正文',
+            missingRegionIds: omitted ? {'r:row-4'} : null,
+          );
+        },
+      );
+      RecognitionStructureInput? structureInput;
+      final result = await pipelineOf(
+        transport,
+        structureRecoverer: _MarkerRecoverer(Object(), (input) {
+          structureInput = input;
+        }),
+      ).run(captureOf(scene), correctedPartitions: partitions);
+      expect(transport.decodedBodies('read'), hasLength(2));
+      expect(verifies, mode == '首次确认' || mode == '初读漏答' ? 1 : 2);
+      for (final request in transport.decodedBodies('verify')) {
+        final region = (request['regions'] as List).single as Map;
+        expect(region['regionId'], 'r:row-4');
+        expect(region.containsKey('originalText'), isFalse);
+        expect(region.containsKey('originalConfidence'), isFalse);
+      }
+      if (mode != '首次确认') {
+        final recovery = transport.decodedBodies('verify').last;
+        expect(
+          (recovery['regions'] as List).single['reason'],
+          'coverageRecovery',
+        );
+        expect(
+          transport.requests.last.readTimeoutMs,
+          inInclusiveRange(9000, 10000),
+        );
+      }
+      final verifyFails = mode == '补读低置信';
+      expect(result.regionOutcomes['r:row-4']?.verified, !verifyFails);
+      expect(
+        structureInput!.regionOutcomes.containsKey('r:row-4'),
+        !verifyFails,
+      );
+      expect(
+        result.ledger.preservedCount,
+        verifyFails ? partitions.last.strokes.length : 0,
+      );
+      if (!verifyFails) {
+        expect(result.regionOutcomes['r:row-4']?.text, '复核正文');
+        expect(result.partial, isFalse);
+      } else {
+        expect(
+          result.ledger.entryOf('row-4-0').reason,
+          SourcePreserveReason.missingResponse,
+        );
+      }
+    });
+  }
 
   for (final missing in [false, true]) {
     test('自动重分组重新出图与替换成员；复核漏答=$missing', () async {
@@ -306,6 +473,74 @@ void main() {
     expect(result.regionOutcomes, isEmpty, reason: '无响应不产生 outcome（不是模型输出）');
   });
 
+  for (final outcome in ['乱序完成', '取消', '单批超时']) {
+    test('初读最多两批在途，按批次顺序入账（$outcome）', () async {
+      final firstBatch = Completer<void>();
+      final secondBatchSeen = Completer<void>();
+      var calls = 0;
+      final transport = FakeRecognitionTransport(
+        responder: (body) async {
+          final request = jsonDecode(body) as Map<String, Object?>;
+          switch (++calls) {
+            case 1:
+              await firstBatch.future;
+            case 2:
+              secondBatchSeen.complete();
+              if (outcome == '取消') await firstBatch.future;
+              if (outcome == '单批超时') {
+                return (504, errorEnvelopeJson('providerTimeout', '超时', true));
+              }
+          }
+          return buildBatchResponseBody(request, confidence: 0.95);
+        },
+      );
+      var scene = Scene();
+      for (var i = 1; i <= 9; i++) {
+        scene = scene.addElement(stroke('s$i', 10, 100.0 * i));
+      }
+      final pipeline = pipelineOf(transport);
+      final run = pipeline.run(captureOf(scene));
+      await secondBatchSeen.future.timeout(const Duration(seconds: 5));
+      expect(transport.requests, hasLength(2));
+      final tokens = transport.requests.map((r) => r.cancelToken!).toList();
+      expect(tokens.toSet(), hasLength(2));
+      if (outcome == '取消') {
+        final cancelled = expectLater(
+          run,
+          throwsA(isA<RecognitionCancelledException>()),
+        );
+        pipeline.cancel();
+        expect(tokens.every((token) => token.isCancelled), isTrue);
+        firstBatch.complete();
+        await cancelled;
+        expect(transport.requests, hasLength(2));
+      } else {
+        firstBatch.complete();
+        final result = await run;
+        expect(
+          transport
+              .decodedBodies('read')
+              .map((r) => (r['regions'] as List).length),
+          [4, 4, 1],
+        );
+        if (outcome == '单批超时') {
+          expect(result.regionOutcomes.keys, [
+            for (final i in [1, 2, 3, 4, 9]) 'r:s$i',
+          ]);
+          expect(result.ledger.projection.preservedReasons, {
+            for (var i = 5; i <= 8; i++)
+              's$i': SourcePreserveReason.missingResponse,
+          });
+        } else {
+          expect(result.regionOutcomes.keys, [
+            for (var i = 1; i <= 9; i++) 'r:s$i',
+          ]);
+          expect(result.ledger.preservedCount, 0);
+        }
+      }
+    });
+  }
+
   test('重试仅一次：retryable 失败一次后成功；连续失败不再重试', () async {
     var failCount = 0;
     final transport = FakeRecognitionTransport(
@@ -345,7 +580,7 @@ void main() {
   });
 
   for (final stage in ['read', 'verify', 'structure']) {
-    test('$stage 超时不重试，三个阶段使用同一注入超时预算', () async {
+    test('$stage 超时不重试，复核和结构受各自阶段时限约束', () async {
       final transport = FakeRecognitionTransport(
         responder: (body) async {
           final req = jsonDecode(body) as Map<String, Object?>;
@@ -378,7 +613,15 @@ void main() {
       );
       expect(transport.decodedBodies(stage), hasLength(1));
       expect(result.failure?.code, 'providerTimeout');
-      expect(transport.requests.every((r) => r.readTimeoutMs == 75000), isTrue);
+      final timeout = transport.requests.last.readTimeoutMs;
+      switch (stage) {
+        case 'read':
+          expect(timeout, 75000);
+        case 'verify':
+          expect(timeout, inInclusiveRange(34000, 35000));
+        case 'structure':
+          expect(timeout, inInclusiveRange(44000, 45000));
+      }
       if (stage == 'structure') {
         expect(
           (result.structureResult as StructureResult).modelRejected,

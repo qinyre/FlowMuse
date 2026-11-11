@@ -20,11 +20,13 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import '../core/elements/collaboration_element_owner.dart';
+import '../core/elements/latex_source.dart';
 import '../core/serialization/external_export_sanitizer.dart';
 import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../rendering/export/pdf_note_exporter.dart' deferred as pdf_export;
 import '../rendering/page_reading_position.dart';
 import '../rendering/local_wet_ink_state.dart';
 import '../input/active_preview_metrics_probe.dart';
@@ -40,7 +42,11 @@ const String _logTag = 'InkRecognition';
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
-Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
+Scene _sceneWithLayoutPagesForLayout(
+  Scene scene,
+  CanvasLayout layout, {
+  bool materializePdfPages = false,
+}) {
   if (!layout.isPaged) {
     return scene;
   }
@@ -49,7 +55,7 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
     for (final element in scene.elements)
       if (element.isCanvasPage) element.pageId ?? element.id.value,
   };
-  final legacyPdfIds = existingPageIds.isEmpty
+  final legacyPdfIds = existingPageIds.isEmpty && !materializePdfPages
       ? {
           for (final element in scene.elements)
             if (!element.isDeleted && element.isPdfBackground) element.pageId,
@@ -2177,8 +2183,14 @@ class MarkdrawController extends ChangeNotifier {
     } else {
       final element = _editorState.scene.getElementById(id);
       if (element is TextElement) {
+        final parentId = element.containerId;
+        final parent = parentId == null
+            ? null
+            : _editorState.scene.getElementById(ElementId(parentId));
         _applyLocalResult(
-          UpdateElementResult(_textElementWithContent(element, text)),
+          parent != null && MindmapUtils.isMindmapNode(parent)
+              ? _updateMindmapLabel(parent, element, text)
+              : UpdateElementResult(_textElementWithContent(element, text)),
         );
       }
     }
@@ -3101,15 +3113,24 @@ class MarkdrawController extends ChangeNotifier {
       // Flutter Web converts Ctrl+wheel and trackpad pinch into scale signals.
       factor = event.scale;
     } else if (event is PointerScrollEvent) {
-      if (event.scrollDelta.dy == 0) return;
+      final delta = event.scrollDelta;
+      if (!delta.dx.isFinite || !delta.dy.isFinite) return;
       final ctrl =
           HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       if (isPagedViewport && !ctrl) {
-        scrollPagedViewportBy(event.scrollDelta.dy);
+        // Keep vertical mouse-wheel paging in RTL; trackpad axes stay physical.
+        final scroll = _layout.isRightToLeft && delta.dx == 0
+            ? Offset(-delta.dy, 0)
+            : delta;
+        panViewport(
+          scroll.dx / _editorState.viewport.zoom,
+          scroll.dy / _editorState.viewport.zoom,
+        );
         return;
       }
-      factor = event.scrollDelta.dy < 0 ? 1.1 : 0.9;
+      if (delta.dy == 0) return;
+      factor = delta.dy < 0 ? 1.1 : 0.9;
     } else {
       return;
     }
@@ -3832,7 +3853,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Applies collaboration element updates without rebuilding the full scene.
-  void applyRemoteElements(Iterable<Element> elements) {
+  void applyRemoteElements(
+    Iterable<Element> elements, {
+    bool notifySceneChange = true,
+  }) {
     final updates = [
       for (final element in elements)
         if (element is TextElement && element.containerId == null)
@@ -3850,7 +3874,9 @@ class MarkdrawController extends ChangeNotifier {
       _applyViewportConstraints();
     }
     _lastChangedElements = null;
-    _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
+    if (notifySceneChange) {
+      _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
+    }
     if (updates.every(
           (element) => element is FreedrawElement && !element.isCanvasPage,
         ) &&
@@ -3861,6 +3887,19 @@ class MarkdrawController extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+  }
+
+  /// Attaches downloaded files without replacing elements or resetting the view.
+  void applyRemoteImageFiles(Map<String, ImageFile> files) {
+    if (files.isEmpty) return;
+    _historyManager.recordRemoteFiles(files);
+    var scene = _editorState.scene;
+    for (final entry in files.entries) {
+      scene = scene.addFile(entry.key, entry.value);
+    }
+    _editorState = _editorState.copyWith(scene: scene);
+    _notifySceneChanged(scene, SceneChangeSource.remoteApply);
+    notifyListeners();
   }
 
   /// Clears the scene and undo history.
@@ -4240,11 +4279,17 @@ class MarkdrawController extends ChangeNotifier {
     final preparedTexts = adaptiveLayout
         ? [
             for (final text in normalized)
-              ..._splitAdaptiveText(
-                text,
-                insertionAreas.first.rect.width,
-                insertionAreas.first.rect.height * 0.8,
-              ),
+              if (standaloneLatex(text) != null)
+                text
+              else
+                ..._splitAdaptiveText(
+                  text,
+                  insertionAreas.first.rect.height * 0.8,
+                  (chunk) => _adaptiveTextHeight(
+                    chunk,
+                    insertionAreas.first.rect.width,
+                  ),
+                ),
           ]
         : normalized;
     var areaIndex = 0;
@@ -4334,6 +4379,194 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
+  /// Appends a typeset draft as a single undoable edit.
+  void insertNoteDraft(List<NoteDraftBlock> blocks) {
+    if (blocks.isEmpty) return;
+    if (pageNavigationBusy || _editingTextElementId != null) {
+      throw StateError('请先完成当前画布操作，再写入整理稿');
+    }
+    final scene = _editorState.scene;
+    var layout = _layout;
+    final before = _sceneWithLayoutPagesForLayout(
+      scene,
+      layout,
+      materializePdfPages: true,
+    );
+    final elements = before.elements.skip(scene.elements.length).toList();
+    final visible = _editorState.viewport.visibleRect(_canvasSize);
+    final existing = layout.isPaged ? null : ExportBounds.compute(scene);
+    final paperSize = CanvasLayout.pageSizeForTemplate(
+      CanvasPageTemplate.blank,
+    );
+    final paperLeft = existing == null
+        ? visible.left + 24
+        : existing.right + 80;
+    final paperTop = visible.top + 24;
+    const margin = 120.0;
+    const headerHeight = 106.0;
+    const accent = '#285D56';
+    var sheet = 0;
+    String? pageId;
+    String? firstPageId;
+    late Rect area;
+    late double y;
+
+    Map<String, Object?>? pageData() =>
+        pageId == null ? null : CanvasLayout.elementCustomData(pageId!);
+
+    void beginSheet() {
+      Rect paper;
+      if (layout.isPaged) {
+        final next = _buildTextPage(layout, CanvasPageTemplate.blank);
+        layout = layout.copyWith(pages: [...layout.pages, next.page]);
+        pageId = next.page.id;
+        firstPageId ??= pageId;
+        paper = next.page.bounds;
+        elements.add(next.element);
+      } else {
+        paper = Rect.fromLTWH(
+          paperLeft,
+          paperTop + sheet * (paperSize.height + 40),
+          paperSize.width,
+          paperSize.height,
+        );
+        elements.add(
+          RectangleElement(
+            id: ElementId.generate(),
+            x: paper.left,
+            y: paper.top,
+            width: paper.width,
+            height: paper.height,
+            strokeColor: '#DFE7E1',
+            backgroundColor: '#FAFBF7',
+            fillStyle: FillStyle.solid,
+            roughness: 0,
+            locked: true,
+          ),
+        );
+      }
+      sheet++;
+      final inner = paper.deflate(margin);
+      final columnWidth = math.min(inner.width, 1120.0);
+      area = Rect.fromLTWH(
+        inner.center.dx - columnWidth / 2,
+        inner.top,
+        columnWidth,
+        inner.height,
+      );
+      elements.addAll([
+        TextElement(
+          id: ElementId.generate(),
+          x: area.left,
+          y: area.top,
+          width: area.width,
+          height: 42,
+          text: '整理笔记  /  ${sheet.toString().padLeft(2, '0')}',
+          fontSize: 26,
+          fontFamily: 'Helvetica',
+          strokeColor: accent,
+          customData: pageData(),
+        ),
+        RectangleElement(
+          id: ElementId.generate(),
+          x: area.left,
+          y: area.top + 54,
+          width: area.width,
+          height: 3,
+          strokeColor: 'transparent',
+          backgroundColor: '#9CBEB1',
+          fillStyle: FillStyle.solid,
+          roughness: 0,
+          locked: true,
+          customData: pageData(),
+        ),
+      ]);
+      y = area.top + headerHeight;
+    }
+
+    beginSheet();
+    for (final block in blocks) {
+      final (fontSize, gap, color) = switch (block.role) {
+        NoteDraftRole.title => (68.0, 48.0, '#173C35'),
+        NoteDraftRole.section => (46.0, 24.0, accent),
+        _ => (36.0, 22.0, '#293631'),
+      };
+      final bullet = block.role == NoteDraftRole.bullet;
+      final indent = bullet ? 38.0 : 0.0;
+      final width = area.width - indent;
+      final prototype = TextElement(
+        id: const ElementId('draft-measure'),
+        x: 0,
+        y: 0,
+        width: width,
+        height: 0,
+        text: bullet ? '•  ${block.text}' : block.text,
+        fontFamily: 'Helvetica',
+        fontSize: fontSize,
+        lineHeight: 1.45,
+        strokeColor: color,
+        autoResize: false,
+      );
+      double measure(String text) => TextRenderer.measure(
+        prototype.copyWithText(text: text),
+        maxWidth: width,
+      ).$2;
+      final keepWithNext = block.role == NoteDraftRole.section ? 72.0 : 0.0;
+      final chunks = block.role == NoteDraftRole.formula
+          ? [prototype.text]
+          : _splitAdaptiveText(
+              prototype.text,
+              area.height - headerHeight,
+              measure,
+            );
+      for (final chunk in chunks) {
+        final height = measure(chunk);
+        if (y > area.top + headerHeight &&
+            y + height + keepWithNext > area.bottom) {
+          beginSheet();
+        }
+        elements.add(
+          TextElement(
+            id: ElementId.generate(),
+            text: chunk,
+            x: area.left + indent,
+            y: y,
+            width: width,
+            height: height,
+            fontFamily: prototype.fontFamily,
+            fontSize: fontSize,
+            lineHeight: prototype.lineHeight,
+            strokeColor: color,
+            autoResize: false,
+            customData: pageData(),
+          ),
+        );
+        y += height + gap;
+      }
+    }
+    // Legacy PDF page markers must survive undo so a peer can still find the original pages.
+    _historyManager.push(before);
+    _layout = layout;
+    applyResult(
+      CompoundResult([
+        for (final element in elements) AddElementResult(element),
+        SetSelectionResult({}),
+      ]),
+      applyDefaultStyle: false,
+    );
+    if (firstPageId != null) {
+      navigateToPage(firstPageId!, fit: true);
+    } else if (!_canvasSize.isEmpty) {
+      setViewport(
+        _editorState.viewport.fitToBounds(
+          Bounds.fromLTWH(paperLeft, paperTop, paperSize.width, paperSize.height),
+          _canvasSize,
+          padding: math.min(24, _canvasSize.shortestSide / 8),
+        ),
+      );
+    }
+  }
+
   List<({Rect rect, String? pageId})> _adaptiveTextInsertionAreas(
     Size canvasSize,
   ) {
@@ -4356,7 +4589,11 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  List<String> _splitAdaptiveText(String text, double width, double maxHeight) {
+  List<String> _splitAdaptiveText(
+    String text,
+    double maxHeight,
+    double Function(String text) measureHeight,
+  ) {
     final runes = text.runes.toList();
     final chunks = <String>[];
     var offset = 0;
@@ -4368,7 +4605,7 @@ class MarkdrawController extends ChangeNotifier {
         final candidate = String.fromCharCodes(
           runes.sublist(offset, offset + mid),
         );
-        if (_adaptiveTextHeight(candidate, width) <= maxHeight) {
+        if (measureHeight(candidate) <= maxHeight) {
           low = mid;
         } else {
           high = mid - 1;
@@ -4407,11 +4644,24 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   ({Rect rect, String pageId, Element element}) _appendAdaptiveTextPage() {
-    final index = _layout.pages.length;
+    final next = _buildTextPage(_layout, _layout.template);
+    _layout = _layout.copyWith(pages: [..._layout.pages, next.page]);
+    return (
+      rect: next.page.bounds.deflate(72),
+      pageId: next.page.id,
+      element: next.element,
+    );
+  }
+
+  ({CanvasPage page, Element element}) _buildTextPage(
+    CanvasLayout layout,
+    CanvasPageTemplate template,
+  ) {
+    final index = layout.pages.length;
     final pageId = 'page-${ElementId.generate().value}';
-    final size = CanvasLayout.pageSizeForTemplate(_layout.template);
-    final lastPage = _layout.pages.lastOrNull;
-    final bounds = switch (_layout.pageFlow) {
+    final size = CanvasLayout.pageSizeForTemplate(template);
+    final lastPage = layout.pages.lastOrNull;
+    final bounds = switch (layout.pageFlow) {
       CanvasPageFlow.topToBottom => Rect.fromLTWH(
         lastPage?.bounds.left ?? 0,
         lastPage == null ? 0 : lastPage.bounds.bottom + CanvasLayout.pageGap,
@@ -4431,13 +4681,11 @@ class MarkdrawController extends ChangeNotifier {
       id: pageId,
       index: index,
       bounds: bounds,
-      template: _layout.template,
-      pageFlow: _layout.pageFlow,
+      template: template,
+      pageFlow: layout.pageFlow,
     );
-    _layout = _layout.copyWith(pages: [..._layout.pages, page]);
     return (
-      rect: page.bounds.deflate(72),
-      pageId: pageId,
+      page: page,
       element: RectangleElement(
         id: ElementId(pageId),
         x: page.bounds.left,
@@ -5062,6 +5310,44 @@ class MarkdrawController extends ChangeNotifier {
     _enterMindmapNodeEditing();
   }
 
+  ToolResult _updateMindmapLabel(
+    Element parent,
+    TextElement label,
+    String text,
+  ) {
+    final scene = _editorState.scene.elements;
+    final root = MindmapUtils.rootOf(parent, scene);
+    final tree = MindmapUtils.treeFromScene(root, scene);
+    final node = _findTreeNode(tree, parent.id.value);
+    if (node != null) {
+      node.text = text;
+      final result = _applyReflow(tree, root);
+      if (result != null) return result;
+      onMindmapOperationError?.call('页面空间不足，已保留文字。可缩短内容后重新整理');
+    }
+    return UpdateElementResult(
+      MindmapLayout.positionLabel(label.copyWithText(text: text), parent),
+    );
+  }
+
+  void mindmapTidy() {
+    final selected = selectedElements.singleOrNull;
+    if (selected == null ||
+        !MindmapUtils.isMindmapNode(selected) ||
+        pageNavigationBusy) {
+      return;
+    }
+    final scene = _editorState.scene.elements;
+    final root = MindmapUtils.rootOf(selected, scene);
+    final result = _applyReflow(MindmapUtils.treeFromScene(root, scene), root);
+    if (result == null) {
+      onMindmapOperationError?.call('当前页面空间不足，无法整理导图');
+      return;
+    }
+    pushHistory();
+    applyResult(result, applyDefaultStyle: false);
+  }
+
   /// Adds a sibling below the single selected mind-map node, then reflows.
   void mindmapAddSibling() {
     final selected = selectedElements;
@@ -5120,7 +5406,11 @@ class MarkdrawController extends ChangeNotifier {
           .firstOrNull;
       if (page == null) return null;
       final content = page.bounds.deflate(72);
-      final preview = MindmapLayout.treeToElements(tree, origin: origin);
+      final preview = MindmapLayout.treeToElements(
+        tree,
+        origin: origin,
+        anchorRoot: true,
+      );
       final previewBounds = preview
           .map(_placementBoundsForElement)
           .reduce((left, right) => left.union(right));
@@ -5145,7 +5435,11 @@ class MarkdrawController extends ChangeNotifier {
         origin.y + placement.top - previewBounds.top,
       );
     }
-    final plan = MindmapLayout.reflowTree(tree, origin: origin);
+    final plan = MindmapLayout.reflowTree(
+      tree,
+      origin: origin,
+      anchorRoot: true,
+    );
     final results = <ToolResult>[];
 
     // Build a lookup of new node positions by sourceId, so we can recompute
@@ -5247,9 +5541,12 @@ class MarkdrawController extends ChangeNotifier {
     final updatedRect = (node as RectangleElement).copyWith(
       x: u.x,
       y: u.y,
+      width: u.width,
+      height: u.height,
       backgroundColor: bg,
       strokeColor: stroke,
       strokeWidth: strokeWidth,
+      roughness: 0,
       roundness: Roundness.adaptive(value: roundnessValue),
     );
 
@@ -5261,18 +5558,23 @@ class MarkdrawController extends ChangeNotifier {
     );
     // copyWithText handles font size; copyWith handles position + text colour
     // (TextElement has no single method covering both).
-    final updatedText = boundText
-        .copyWithText(fontSize: fontSize)
-        .copyWith(x: u.x, y: u.y, strokeColor: textColor);
+    final updatedText = MindmapLayout.positionLabel(
+      boundText
+          .copyWithText(
+            text: u.text,
+            fontSize: fontSize,
+            fontFamily: 'Helvetica',
+          )
+          .copyWith(strokeColor: textColor),
+      updatedRect,
+    );
     return CompoundResult([
       UpdateElementResult(updatedRect),
       UpdateElementResult(updatedText),
     ]);
   }
 
-  /// Recomputes an existing mind-map edge's Bézier points from the post-reflow
-  /// positions of its endpoints. Width/height come from the current element
-  /// (node size is constant); x/y come from the reflow plan.
+  /// Recomputes the curve against both nodes' post-reflow positions and sizes.
   ArrowElement _recomputeEdgeFromPlan(
     ArrowElement edge,
     String startId,
@@ -5283,14 +5585,20 @@ class MarkdrawController extends ChangeNotifier {
     final parent = scene.getElementById(ElementId(startId));
     final child = scene.getElementById(ElementId(endId));
     if (parent == null || child == null) return edge;
-    // Apply the new x/y from the plan (width/height unchanged).
     final pu = newPosByNodeId[startId];
     final cu = newPosByNodeId[endId];
     final parentMoved = parent.copyWith(
       x: pu?.x ?? parent.x,
       y: pu?.y ?? parent.y,
+      width: pu?.width ?? parent.width,
+      height: pu?.height ?? parent.height,
     );
-    final childMoved = child.copyWith(x: cu?.x ?? child.x, y: cu?.y ?? child.y);
+    final childMoved = child.copyWith(
+      x: cu?.x ?? child.x,
+      y: cu?.y ?? child.y,
+      width: cu?.width ?? child.width,
+      height: cu?.height ?? child.height,
+    );
     return MindmapLayout.recomputeEdge(edge, parentMoved, childMoved);
   }
 
@@ -5476,14 +5784,49 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Renders an arbitrary scene-space rectangle to PNG bytes, mirroring the
   /// live canvas (background color, grid, dark-mode grid colors, page-union
-  /// clipping, math-text skipping). Pixels only: never embeds markdraw
+  /// clipping). Formula source is retained as text when no widget layer is available.
+  /// Pixels only: never embeds markdraw
   /// metadata — the bytes may be sent to external AI services.
   Future<Uint8List?> exportRegionPng(
     Rect sceneBounds, {
+    Scene? scene,
     double maxLongestSide = 1568,
     void Function(Canvas canvas, double zoom)? afterPaint,
   }) async {
-    if (sceneBounds.width <= 0 || sceneBounds.height <= 0) return null;
+    final image = await _renderRegionImage(
+      sceneBounds,
+      scene: scene ?? _editorState.scene,
+      layout: _layout,
+      background: _canvasBackgroundColor,
+      gridSize: _gridSize,
+      contentBounds: _contentBounds,
+      maxLongestSide: maxLongestSide,
+      afterPaint: afterPaint,
+    );
+    if (image == null) return null;
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      return bytes?.buffer.asUint8List(
+        bytes.offsetInBytes,
+        bytes.lengthInBytes,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
+
+  Future<ui.Image?> _renderRegionImage(
+    Rect sceneBounds, {
+    required Scene scene,
+    required CanvasLayout layout,
+    required String background,
+    required int? gridSize,
+    required Bounds? contentBounds,
+    required double maxLongestSide,
+    bool opaque = false,
+    void Function(Canvas canvas, double zoom)? afterPaint,
+  }) async {
+    if (sceneBounds.isEmpty || !sceneBounds.isFinite) return null;
     final longest = maxLongestSide <= 0 ? 1568.0 : maxLongestSide;
     final sourceWidth = math.max(1.0, sceneBounds.width);
     final sourceHeight = math.max(1.0, sceneBounds.height);
@@ -5496,39 +5839,100 @@ class MarkdrawController extends ChangeNotifier {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    if (opaque) canvas.drawColor(Colors.white, BlendMode.src);
     canvas.drawRect(
       Offset.zero & pixelSize,
-      Paint()..color = parseColor(_canvasBackgroundColor),
+      Paint()..color = parseColor(background),
     );
     StaticCanvasPainter(
-      scene: _editorState.scene,
+      scene: scene,
       adapter: _adapter,
       viewport: viewport,
-      layout: _layout,
-      resolvedImages: _peekResolvedImages(),
-      gridSize: _gridSize,
-      isDarkBackground:
-          parseColor(_canvasBackgroundColor).computeLuminance() < 0.5,
-      contentBounds: _contentBounds,
+      layout: layout,
+      resolvedImages: _peekResolvedImages(scene: scene),
+      gridSize: gridSize,
+      isDarkBackground: parseColor(background).computeLuminance() < 0.5,
+      contentBounds: contentBounds,
       renderPageShadows: false,
-      skipMathText: true,
     ).paint(canvas, pixelSize);
     // Set-of-Mark 等叠加层：画在场景之上、导出像素坐标空间。
     afterPaint?.call(canvas, zoom);
 
     final picture = recorder.endRecording();
-    ui.Image? image;
     try {
-      image = await picture.toImage(
+      return await picture.toImage(
         pixelSize.width.ceil(),
         pixelSize.height.ceil(),
       );
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
     } finally {
-      image?.dispose();
       picture.dispose();
     }
+  }
+
+  /// Renders the complete note from a single scene snapshot.
+  Future<Uint8List?> exportPdf({
+    void Function(int completed, int total)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final scene = sanitizeSceneForExternalExport(_editorState.scene);
+    final layout = _layout.isPaged ? _layout.ensurePage() : _layout;
+    final background = _canvasBackgroundColor;
+    final gridSize = _gridSize;
+    final contentBounds = _contentBounds;
+    final bounds = layout.isPaged ? null : ExportBounds.compute(scene);
+    final regions = layout.isPaged
+        ? layout.pages.map((page) => page.bounds).toList()
+        : [
+            if (bounds != null)
+              Rect.fromLTWH(
+                bounds.left,
+                bounds.top,
+                bounds.size.width,
+                bounds.size.height,
+              ),
+          ];
+    bool cancelled() => _disposed || (isCancelled?.call() ?? false);
+    final missing = scene.elements
+        .whereType<ImageElement>()
+        .where(
+          (image) => !image.isDeleted && !scene.files.containsKey(image.fileId),
+        )
+        .toList();
+    if (regions.isEmpty || cancelled()) return null;
+    await pdf_export.loadLibrary();
+    return pdf_export.renderNotePdf(
+      pages: regions,
+      paged: layout.isPaged,
+      isCancelled: cancelled,
+      onProgress: onProgress,
+      renderPage: (region) async {
+        final regionBounds = Bounds.fromLTWH(
+          region.left,
+          region.top,
+          region.width,
+          region.height,
+        );
+        if (missing.any(
+          (image) =>
+              AlignmentUtils.visualBounds(image).intersects(regionBounds),
+        )) {
+          throw StateError('有图片未加载');
+        }
+        final failed = await prewarmRegionImages(region, scene: scene);
+        if (cancelled()) return null;
+        if (failed != 0) throw StateError('无法解码页面图片');
+        return _renderRegionImage(
+          region,
+          scene: scene,
+          layout: layout,
+          background: background,
+          gridSize: gridSize,
+          contentBounds: contentBounds,
+          maxLongestSide: 2000,
+          opaque: true,
+        );
+      },
+    );
   }
 
   /// Peek-only image resolution for region export: unlike [resolveImages],
@@ -5753,16 +6157,34 @@ class MarkdrawController extends ChangeNotifier {
     int scale = 2,
     bool selectedOnly = true,
     bool embedMarkdraw = true,
-  }) {
+  }) async {
     final selectedIds = selectedOnly && _editorState.selectedIds.isNotEmpty
         ? _editorState.selectedIds
         : null;
+    final scene = sanitizeSceneForExternalExport(_editorState.scene);
+    final backgroundColor = parseColor(_canvasBackgroundColor);
+    if (scene.files.isNotEmpty) {
+      final bounds = ExportBounds.compute(scene, selectedIds: selectedIds);
+      if (bounds == null) return null;
+      final region = Rect.fromLTWH(
+        bounds.left,
+        bounds.top,
+        bounds.size.width,
+        bounds.size.height,
+      );
+      if (_imageFilesInRect(scene, region)
+          .keys.any((id) => !_imageCache.contains(id))) {
+        await prewarmRegionImages(region, scene: scene);
+        if (_disposed) return null;
+      }
+    }
     return PngExporter.export(
-      sanitizeSceneForExternalExport(_editorState.scene),
+      scene,
       _adapter,
       scale: scale,
-      backgroundColor: parseColor(_canvasBackgroundColor),
+      backgroundColor: backgroundColor,
       selectedIds: selectedIds,
+      resolvedImages: _peekResolvedImages(scene: scene),
       embedMarkdraw: embedMarkdraw,
     );
   }
@@ -5878,26 +6300,54 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void deletePage(String pageId) {
-    if (!_layout.isPaged || _layout.pages.length <= 1) {
-      return;
+    deletePages({pageId});
+  }
+
+  bool deletePages(Set<String> pageIds) {
+    if (_disposed || _viewMode || !_layout.isPaged || pageIds.isEmpty) {
+      return false;
     }
+    final existing = _layout.pages.map((page) => page.id).toSet();
+    if (!existing.containsAll(pageIds) ||
+        pageIds.length >= existing.length ||
+        !preparePageNavigation()) {
+      return false;
+    }
+    final readingPosition = captureReadingPosition();
     final remaining = [
       for (final page in _layout.pages)
-        if (page.id != pageId) page,
+        if (!pageIds.contains(page.id)) page,
     ];
-    if (remaining.length == _layout.pages.length) {
-      return;
-    }
+    final nextPage =
+        readingPosition != null && pageIds.contains(readingPosition.pageId)
+        ? _layout.pages
+              .skip(readingPosition.ordinal)
+              .firstWhere(
+                (page) => !pageIds.contains(page.id),
+                orElse: () => remaining.last,
+              )
+        : null;
+    final removed = {
+      for (final element in _editorState.scene.activeElements)
+        if (pageIds.contains(_attachCurrentPage(element).pageId) ||
+            (element.isCanvasPage && pageIds.contains(element.id.value)))
+          element.id,
+    };
     final results = <ToolResult>[
-      for (final element in _editorState.scene.elements)
-        if (element.pageId == pageId || element.id.value == pageId)
-          RemoveElementResult(element.id),
+      for (final id in removed) RemoveElementResult(id),
+      SetSelectionResult(_editorState.selectedIds.difference(removed)),
+      ..._pageReorderResults(remaining),
     ];
-    _layout = _layout.copyWith(pages: remaining);
-    results.addAll(_pageReorderResults(remaining));
     pushHistory();
-    applyResult(CompoundResult(results));
+    applyResult(CompoundResult(results), applyDefaultStyle: false);
     _syncLayoutFromScene();
+    if (nextPage != null) {
+      navigateToPage(nextPage.id, fit: true);
+    } else {
+      final viewport = readingPosition?.restore(_layout, _canvasSize);
+      if (viewport != null) setViewport(viewport);
+    }
+    return true;
   }
 
   void reorderPage(String pageId, int newIndex) {
@@ -5923,6 +6373,9 @@ class MarkdrawController extends ChangeNotifier {
 
   List<ToolResult> _pageReorderResults(List<CanvasPage> pages) {
     final oldPagesById = {for (final page in _layout.pages) page.id: page};
+    final elements = _editorState.scene.elements
+        .map(_attachCurrentPage)
+        .toList();
     final nextPages = <CanvasPage>[];
     final deltaByPageId = <String, Offset>{};
 
@@ -5995,7 +6448,7 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
 
-    for (final element in _editorState.scene.elements) {
+    for (final element in elements) {
       if (element.isCanvasPage || element.isDeleted) {
         continue;
       }

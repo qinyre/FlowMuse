@@ -185,7 +185,7 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
                       children: [
                         IconTheme(
                           data: IconThemeData(color: foreground),
-                          child: DefaultTextStyle(
+                          child: DefaultTextStyle.merge(
                             style: TextStyle(color: foreground),
                             child: widget.child,
                           ),

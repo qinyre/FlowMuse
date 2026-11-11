@@ -1,10 +1,12 @@
 library;
 
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'positioned_math_text.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -27,10 +29,13 @@ class EditorCanvas extends StatefulWidget {
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onUserInteraction;
+  final VoidCallback? onBlankTap;
   final RemoteWetInkStore? remoteWetInkStore;
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
+  final Map<String, VoidCallback> selectionActions;
+  final Widget Function(ViewportState viewport)? overlayBuilder;
 
   /// 协作聚焦（本机视图态纯数据通道，v4 §7.1）。
   final String? focusedCreatorKey;
@@ -46,8 +51,11 @@ class EditorCanvas extends StatefulWidget {
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onUserInteraction,
+    this.onBlankTap,
     this.remoteWetInkStore,
     this.attributionActionResolver,
+    this.selectionActions = const {},
+    this.overlayBuilder,
     this.focusedCreatorKey,
     this.focusHistoricalContent = false,
     this.socketIdCreatorKeys = const {},
@@ -65,14 +73,16 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   MarkdrawController get controller => widget.controller;
   Size? _lastReportedSize;
-  final Set<int> _activeTouchPointers = {};
+  final Set<int> _activePagedPanPointers = {};
   final Set<int> _touchPointers = {};
   bool _multiTouch = false;
+  (PointerDownEvent, EditorState)? _blankTap;
   int? _pagedScrollPointer;
-  Offset? _pagedTouchStartPosition;
-  bool _pagedTouchMoved = false;
+  Offset? _pagedPanStartPosition;
+  bool _pagedPanMoved = false;
   double _appendPageOverscroll = 0;
   bool _appendPageReady = false;
+  Timer? _appendPageWheelTimer;
   late final AnimationController _appendPageOverscrollController;
   final RemoteWetInkRenderCache _remoteWetInkCache = RemoteWetInkRenderCache();
   final StaticCanvasRenderCache _staticCanvasCache = StaticCanvasRenderCache();
@@ -99,7 +109,18 @@ class _EditorCanvasState extends State<EditorCanvas>
   void didUpdateWidget(EditorCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != controller) {
+      _blankTap = null;
       _onTextRecoveryChanged(false);
+      _appendPageWheelTimer?.cancel();
+      _appendPageWheelTimer = null;
+      _appendPageOverscrollController.stop();
+      _appendPageOverscroll = 0;
+      _appendPageReady = false;
+      _activePagedPanPointers.clear();
+      _pagedScrollPointer = null;
+      _pagedPanStartPosition = null;
+      _pagedPanMoved = false;
+      oldWidget.controller.pagedTouchActive = false;
       oldWidget.controller.removeListener(_onControllerChanged);
       controller.addListener(_onControllerChanged);
     }
@@ -126,6 +147,12 @@ class _EditorCanvasState extends State<EditorCanvas>
   }
 
   void _onControllerChanged() {
+    if (mounted &&
+        _appendPageWheelTimer != null &&
+        (controller.viewMode || !controller.isPagedViewport)) {
+      _cancelWheelAppend();
+      return;
+    }
     if (mounted) setState(() {});
   }
 
@@ -134,21 +161,73 @@ class _EditorCanvasState extends State<EditorCanvas>
     _onTextRecoveryChanged(false);
     controller.removeListener(_onControllerChanged);
     controller.pagedTouchActive = false;
+    _appendPageWheelTimer?.cancel();
     _appendPageOverscrollController.dispose();
     _remoteWetInkCache.dispose();
     _staticCanvasCache.dispose();
     super.dispose();
   }
 
-  bool _shouldHandlePagedTouch(PointerEvent event) {
+  bool _shouldHandlePagedPan(PointerEvent event) {
+    if (controller.isPagedViewport &&
+        event.kind == PointerDeviceKind.mouse &&
+        controller.editorState.activeToolType == ToolType.hand &&
+        event.buttons == kPrimaryButton) {
+      return true;
+    }
     return controller.isPagedViewport &&
         event.kind == PointerDeviceKind.touch &&
         controller.canPanPagedViewportWithTouch &&
         controller.shouldPanTouch(event.localPosition);
   }
 
-  bool _isPagedTouchPointer(PointerEvent event) =>
-      _activeTouchPointers.contains(event.pointer);
+  bool _isPagedPanPointer(PointerEvent event) =>
+      _activePagedPanPointers.contains(event.pointer);
+
+  void _beginBlankTap(PointerDownEvent event) {
+    _blankTap = null;
+    if (widget.onBlankTap == null ||
+        event.buttons != kPrimaryButton ||
+        _touchPointers.isNotEmpty ||
+        controller.pageNavigationBusy) {
+      return;
+    }
+    _blankTap = (event, controller.editorState);
+  }
+
+  void _updateBlankTap(PointerMoveEvent event) {
+    final candidate = _blankTap;
+    if (candidate == null) return;
+    if (event.pointer != candidate.$1.pointer ||
+        (event.localPosition - candidate.$1.localPosition).distance >
+            computeHitSlop(event.kind, MediaQuery.gestureSettingsOf(context)) ||
+        controller.activeTool.overlay?.marqueeRect != null) {
+      _blankTap = null;
+    }
+  }
+
+  void _finishBlankTap(PointerUpEvent event) {
+    final candidate = _blankTap;
+    _blankTap = null;
+    if (candidate == null) return;
+    final (down, before) = candidate;
+    final after = controller.editorState;
+    // Observe only after normal dispatch so ink dots and tool clicks keep priority.
+    if (event.pointer != down.pointer ||
+        event.timeStamp - down.timeStamp > kLongPressTimeout ||
+        (event.localPosition - down.localPosition).distance >
+            computeHitSlop(event.kind, MediaQuery.gestureSettingsOf(context)) ||
+        !identical(before.scene, after.scene) ||
+        before.viewport != after.viewport ||
+        before.activeToolType != after.activeToolType ||
+        after.selectedIds.isNotEmpty ||
+        controller.activeTool.overlay != null ||
+        after.scene.getElementAtPoint(controller.toScene(down.localPosition)) !=
+            null) {
+      return;
+    }
+    widget.onBlankTap?.call();
+  }
 
   // Raw pointer moves arrive before the scale recognizer. Stop single-finger
   // editing as soon as a second finger lands, and wait for all fingers to lift.
@@ -161,8 +240,8 @@ class _EditorCanvasState extends State<EditorCanvas>
         pointer: _touchPointers.first,
         kind: PointerDeviceKind.touch,
       );
-      if (_isPagedTouchPointer(cancel)) {
-        _cancelPagedTouch(cancel);
+      if (_isPagedPanPointer(cancel)) {
+        _cancelPagedPan(cancel);
       } else {
         controller.onPointerCancel(cancel);
       }
@@ -178,13 +257,13 @@ class _EditorCanvasState extends State<EditorCanvas>
     return wasMultiTouch;
   }
 
-  void _startPagedTouch(PointerDownEvent event) {
-    _activeTouchPointers.add(event.pointer);
+  void _startPagedPan(PointerDownEvent event) {
+    _activePagedPanPointers.add(event.pointer);
     controller.pagedTouchActive = true;
-    if (_activeTouchPointers.length == 1) {
+    if (_activePagedPanPointers.length == 1) {
       _pagedScrollPointer = event.pointer;
-      _pagedTouchStartPosition = event.localPosition;
-      _pagedTouchMoved = false;
+      _pagedPanStartPosition = event.localPosition;
+      _pagedPanMoved = false;
       _appendPageOverscrollController.stop();
     } else {
       _pagedScrollPointer = null;
@@ -192,65 +271,91 @@ class _EditorCanvasState extends State<EditorCanvas>
     }
   }
 
-  void _updatePagedTouch(PointerMoveEvent event) {
+  void _updatePagedPan(PointerMoveEvent event) {
     if (_pagedScrollPointer != event.pointer ||
-        _activeTouchPointers.length != 1) {
+        _activePagedPanPointers.length != 1) {
       return;
     }
-    if (!controller.canPanPagedViewportWithTouch) {
+    if ((event.kind == PointerDeviceKind.touch &&
+            !controller.canPanPagedViewportWithTouch) ||
+        (event.kind == PointerDeviceKind.mouse &&
+            controller.editorState.activeToolType != ToolType.hand)) {
       _pagedScrollPointer = null;
-      _pagedTouchStartPosition = null;
+      _pagedPanStartPosition = null;
       _snapBackAppendPageOverscroll();
       return;
     }
-    final start = _pagedTouchStartPosition;
+    final start = _pagedPanStartPosition;
     var delta = event.delta;
-    if (!_pagedTouchMoved && start != null) {
+    if (!_pagedPanMoved && start != null) {
       delta = event.localPosition - start;
-      if (delta.distance < kTouchSlop) return;
-      _pagedTouchMoved = true;
+      if (event.kind == PointerDeviceKind.touch &&
+          delta.distance < kTouchSlop) {
+        return;
+      }
+      _pagedPanMoved = true;
     }
 
     final scrollDelta = controller.layout.isRightToLeft ? delta.dx : -delta.dy;
-    if (scrollDelta == 0) {
-      return;
+    final overscrolling = _applyPagedOverscroll(scrollDelta);
+    if (overscrolling) {
+      delta = controller.layout.isRightToLeft
+          ? Offset(0, delta.dy)
+          : Offset(delta.dx, 0);
     }
-
-    if (_appendPageOverscroll > 0 && scrollDelta < 0) {
-      _setAppendPageOverscroll(_appendPageOverscroll + scrollDelta);
-      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
-      return;
-    }
-
-    final metrics = controller.pagedViewportMetrics;
-    if (metrics != null && metrics.atEnd && scrollDelta > 0) {
-      _setAppendPageOverscroll(
-        _appendPageOverscroll + scrollDelta * _elasticFactor,
+    if (event.kind == PointerDeviceKind.mouse && !overscrolling) {
+      controller.onPointerMove(event);
+    } else {
+      controller.applyResult(
+        UpdateViewportResult(controller.editorState.viewport.pan(delta)),
       );
-      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
-      return;
     }
-
-    controller.scrollPagedViewportBy(scrollDelta);
     widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
   }
 
-  void _endPagedTouch(PointerEvent event) {
-    _activeTouchPointers.remove(event.pointer);
-    controller.pagedTouchActive = _activeTouchPointers.isNotEmpty;
+  bool _applyPagedOverscroll(double scrollDelta) {
+    if (_appendPageOverscroll > 0 && scrollDelta < 0) {
+      _setAppendPageOverscroll(_appendPageOverscroll + scrollDelta);
+      return true;
+    }
+
+    final metrics = controller.pagedViewportMetrics;
+    if (!controller.viewMode &&
+        metrics != null &&
+        metrics.atEnd &&
+        scrollDelta > 0) {
+      _setAppendPageOverscroll(
+        _appendPageOverscroll + scrollDelta * _elasticFactor,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  void _endPagedPan(PointerEvent event) {
+    _activePagedPanPointers.remove(event.pointer);
+    controller.pagedTouchActive = _activePagedPanPointers.isNotEmpty;
     if (_pagedScrollPointer != event.pointer) {
       return;
     }
     _pagedScrollPointer = null;
-    final start = _pagedTouchStartPosition;
-    if (!_pagedTouchMoved &&
+    final start = _pagedPanStartPosition;
+    if (event.kind == PointerDeviceKind.touch &&
+        !_pagedPanMoved &&
         start != null &&
         (event.localPosition - start).distance < kTouchSlop) {
       controller.selectOnTouchTap(start);
     }
-    _pagedTouchStartPosition = null;
-    _pagedTouchMoved = false;
-    if (_appendPageReady) {
+    _pagedPanStartPosition = null;
+    _pagedPanMoved = false;
+    _finishPagedAppend();
+  }
+
+  void _finishPagedAppend() {
+    if (_appendPageReady &&
+        !controller.viewMode &&
+        !controller.pageNavigationBusy &&
+        controller.pagedViewportMetrics?.atEnd == true) {
       controller.appendPageAfterLastAndScroll();
       _setAppendPageOverscroll(0);
       return;
@@ -258,13 +363,74 @@ class _EditorCanvasState extends State<EditorCanvas>
     _snapBackAppendPageOverscroll();
   }
 
-  void _cancelPagedTouch(PointerEvent event) {
-    _activeTouchPointers.remove(event.pointer);
-    controller.pagedTouchActive = _activeTouchPointers.isNotEmpty;
+  void _cancelWheelAppend() {
+    if (_appendPageWheelTimer == null) return;
+    _appendPageWheelTimer!.cancel();
+    _appendPageWheelTimer = null;
+    _appendPageOverscrollController.stop();
+    _setAppendPageOverscroll(0);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (event is! PointerScrollEvent ||
+        !controller.isPagedViewport ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed ||
+        _activePagedPanPointers.isNotEmpty) {
+      _cancelWheelAppend();
+      controller.onPointerSignal(event);
+      return;
+    }
+    final scroll = event.scrollDelta;
+    if (!scroll.dx.isFinite || !scroll.dy.isFinite) return;
+    final delta = controller.layout.isRightToLeft && scroll.dx != 0
+        ? -scroll.dx
+        : scroll.dy;
+    if (delta == 0) {
+      _cancelWheelAppend();
+      controller.onPointerSignal(event);
+      return;
+    }
+    _appendPageWheelTimer?.cancel();
+    _appendPageOverscrollController.stop();
+    if (_applyPagedOverscroll(delta)) {
+      final crossScroll = controller.layout.isRightToLeft
+          ? Offset(0, scroll.dx == 0 ? 0 : scroll.dy)
+          : Offset(scroll.dx, 0);
+      controller.applyResult(
+        UpdateViewportResult(controller.editorState.viewport.pan(-crossScroll)),
+      );
+    } else {
+      controller.onPointerSignal(event);
+    }
+    if (_appendPageOverscroll <= 0) {
+      _appendPageWheelTimer = null;
+      return;
+    }
+    final target = controller;
+    final layout = controller.layout;
+    // Wheel signals have no pointer-up event; settle one burst after it stops.
+    _appendPageWheelTimer = Timer(const Duration(milliseconds: 350), () {
+      _appendPageWheelTimer = null;
+      if (!mounted) return;
+      if (identical(controller, target) &&
+          identical(controller.layout, layout)) {
+        _finishPagedAppend();
+      } else {
+        _snapBackAppendPageOverscroll();
+      }
+      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+    });
+  }
+
+  void _cancelPagedPan(PointerEvent event) {
+    _activePagedPanPointers.remove(event.pointer);
+    controller.pagedTouchActive = _activePagedPanPointers.isNotEmpty;
     if (_pagedScrollPointer == event.pointer) {
       _pagedScrollPointer = null;
-      _pagedTouchStartPosition = null;
-      _pagedTouchMoved = false;
+      _pagedPanStartPosition = null;
+      _pagedPanMoved = false;
       _snapBackAppendPageOverscroll();
     }
   }
@@ -338,6 +504,7 @@ class _EditorCanvasState extends State<EditorCanvas>
       overscrollPx: _appendPageOverscroll,
       readyToRelease: _appendPageReady,
       releaseThresholdPx: _appendPageReleaseThreshold,
+      fromScrollWheel: _appendPageWheelTimer != null,
     );
   }
 
@@ -486,6 +653,48 @@ class _EditorCanvasState extends State<EditorCanvas>
               child: wetInkLayers,
             );
           }
+          final scene = controller.editorState.scene;
+          final resolvedImages = controller.resolveImages(
+            viewport: paintViewport,
+            canvasSize: canvasSize,
+          );
+          final hasForegroundImages = scene.foregroundImages.isNotEmpty;
+          final mathText = _MathTextOverlay(
+            controller: controller,
+            viewport: paintViewport,
+            focusedCreatorKey: widget.focusedCreatorKey,
+            focusHistoricalContent: widget.focusHistoricalContent,
+            highlightedElementIds: immutableHighlightIds,
+          );
+          if (hasForegroundImages) {
+            wetInkLayers = Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                wetInkLayers,
+                mathText,
+                IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: StaticCanvasPainter(
+                        pass: ScenePaintPass.foregroundImages,
+                        scene: scene,
+                        adapter: controller.adapter,
+                        viewport: paintViewport,
+                        layout: controller.layout,
+                        contentBounds: controller.contentBounds,
+                        resolvedImages: resolvedImages,
+                        focusedCreatorKey: widget.focusedCreatorKey,
+                        focusHistoricalContent: widget.focusHistoricalContent,
+                        locallyHighlightedElementIds: immutableHighlightIds,
+                        localHighlightRevision: _localHighlightRevision,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
           return MouseRegion(
             cursor: controller.cursorForTool,
             onExit: (_) => controller.onPointerExit(),
@@ -504,10 +713,15 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerDown: (event) {
+                      _beginBlankTap(event);
                       widget.onUserInteraction?.call();
+                      _cancelWheelAppend();
                       if (_beginTouch(event)) return;
-                      if (_shouldHandlePagedTouch(event)) {
-                        _startPagedTouch(event);
+                      if (_shouldHandlePagedPan(event)) {
+                        if (event.kind == PointerDeviceKind.mouse) {
+                          controller.onPointerDown(event);
+                        }
+                        _startPagedPan(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
                           true,
@@ -522,8 +736,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                           event.kind == PointerDeviceKind.touch) {
                         return;
                       }
-                      if (_isPagedTouchPointer(event)) {
-                        _updatePagedTouch(event);
+                      if (_isPagedPanPointer(event)) {
+                        _updatePagedPan(event);
+                        _updateBlankTap(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
                           true,
@@ -531,12 +746,17 @@ class _EditorCanvasState extends State<EditorCanvas>
                         return;
                       }
                       controller.onPointerMove(event);
+                      _updateBlankTap(event);
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
                       if (_endTouch(event)) return;
-                      if (_isPagedTouchPointer(event)) {
-                        _endPagedTouch(event);
+                      if (_isPagedPanPointer(event)) {
+                        if (event.kind == PointerDeviceKind.mouse) {
+                          controller.onPointerUp(event);
+                        }
+                        _endPagedPan(event);
+                        _finishBlankTap(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
                           false,
@@ -545,6 +765,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         return;
                       }
                       controller.onPointerUp(event);
+                      _finishBlankTap(event);
                       widget.onPointerPresence?.call(
                         event.localPosition,
                         false,
@@ -552,9 +773,13 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },
                     onPointerCancel: (event) {
+                      _blankTap = null;
                       if (_endTouch(event)) return;
-                      if (_isPagedTouchPointer(event)) {
-                        _cancelPagedTouch(event);
+                      if (_isPagedPanPointer(event)) {
+                        if (event.kind == PointerDeviceKind.mouse) {
+                          controller.onPointerCancel(event);
+                        }
+                        _cancelPagedPan(event);
                       } else {
                         controller.onPointerCancel(event);
                       }
@@ -564,8 +789,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerSignal: (event) {
+                      _blankTap = null;
                       widget.onUserInteraction?.call();
-                      controller.onPointerSignal(event);
+                      _onPointerSignal(event);
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },
                     child: CustomPaint(
@@ -573,16 +799,16 @@ class _EditorCanvasState extends State<EditorCanvas>
                         renderCache: useLayeredWetInk
                             ? _staticCanvasCache
                             : null,
-                        scene: controller.editorState.scene,
+                        pass: hasForegroundImages
+                            ? ScenePaintPass.content
+                            : ScenePaintPass.all,
+                        scene: scene,
                         adapter: controller.adapter,
                         viewport: paintViewport,
                         layout: controller.layout,
                         previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
-                        resolvedImages: controller.resolveImages(
-                          viewport: paintViewport,
-                          canvasSize: canvasSize,
-                        ),
+                        resolvedImages: resolvedImages,
                         pendingElements:
                             controller.pendingPreviewElements.isNotEmpty
                             ? controller.pendingPreviewElements
@@ -675,13 +901,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                     onRecoveryChanged: _onTextRecoveryChanged,
                     child: TextEditingOverlay(controller: controller),
                   ),
-                _MathTextOverlay(
-                  controller: controller,
-                  viewport: paintViewport,
-                  focusedCreatorKey: widget.focusedCreatorKey,
-                  focusHistoricalContent: widget.focusHistoricalContent,
-                  highlightedElementIds: immutableHighlightIds,
-                ),
+                if (!hasForegroundImages) mathText,
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
                 // Compact property panel trigger
@@ -692,6 +912,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                     right: 12,
                     child: _CompactPropertyButton(
                       controller: controller,
+                      selectionActions: widget.selectionActions,
                       attributionActionResolver:
                           widget.attributionActionResolver,
                     ),
@@ -701,6 +922,8 @@ class _EditorCanvasState extends State<EditorCanvas>
                 if (_singleSelectedMindmapNode(controller) != null)
                   _MindmapAddButtonOverlay(controller: controller),
                 _PagedProgressIndicator(controller: controller),
+                if (widget.overlayBuilder case final buildOverlay?)
+                  Positioned.fill(child: buildOverlay(paintViewport)),
               ],
             ),
           );
@@ -727,11 +950,21 @@ class _MathTextOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visible = viewport.visibleRect(controller.canvasSize);
     final elements = [
       for (final element in controller.editorState.scene.activeElements)
         if (element is TextElement &&
             MathTextUtils.isMathText(element) &&
-            element.id != controller.editingTextElementId)
+            element.id != controller.editingTextElementId &&
+            (element.angle != 0 ||
+                visible.overlaps(
+                  Rect.fromLTWH(
+                    element.x,
+                    element.y,
+                    element.width,
+                    element.height,
+                  ),
+                )))
           element,
     ];
     if (elements.isEmpty) {
@@ -1004,7 +1237,9 @@ class _CompactPropertyButton extends StatelessWidget {
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
+  final Map<String, VoidCallback> selectionActions;
   const _CompactPropertyButton({
+    required this.selectionActions,
     required this.controller,
     this.attributionActionResolver,
   });
@@ -1030,6 +1265,7 @@ class _CompactPropertyButton extends StatelessWidget {
             context,
             controller,
             attributionActionResolver: attributionActionResolver,
+            selectionActions: selectionActions,
           ),
         ),
       ),

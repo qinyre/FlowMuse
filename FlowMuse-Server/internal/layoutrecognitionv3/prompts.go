@@ -34,6 +34,7 @@ const readPromptIntro = `你是白板手写忠实转写器。下面按顺序给�
 - 只输出图中可见文字；图中没有的内容一个字都不许出现。
 - 保留原换行（用 \n 表示）与原有标点；不改写、不纠错、不补全、不润色。
 - 编号（如 1. 2. 3.）原样转写，不重排、不补缺。
+- 逐字辨认小字和术语，核对行首和行尾，不能用近义词替代。若局部字形难辨，输出 uncertain，置信度反映难辨的部分。
 - 每个区域独立判断，不跨区域拼接语义。
 - 无法辨认的区域输出 status:"unreadable"；确定不是文字（纯图形/涂鸦）输出 status:"nonText"。`
 
@@ -51,6 +52,9 @@ func BuildVerifyPrompt(regions []RegionImageInput) string {
 	b.WriteString(" 个待复核区域，按给出图像顺序依次对应：\n")
 	for i, region := range regions {
 		fmt.Fprintf(&b, "%d. regionId=%s，复核原因：%s", i+1, region.RegionID, region.Reason)
+		if region.Reason == "coverageRecovery" {
+			b.WriteString("。上轮没有可靠的整行转写，请从左到右逐字辨认这一张图，单独核对最左、最右的笔迹")
+		}
 		if region.OriginalText != nil && *region.OriginalText != "" {
 			fmt.Fprintf(&b, "，初读结果：%s", *region.OriginalText)
 		}
@@ -63,11 +67,13 @@ func BuildVerifyPrompt(regions []RegionImageInput) string {
 	return b.String()
 }
 
-const verifyPromptIntro = `你是白板手写复核转写器。下面给出待复核区域的截图与初读结果。重新独立读图后输出你的最终判读。
+const verifyPromptIntro = `你是白板手写复核转写器。下面给出待复核区域的截图，部分区域附初读结果。重新独立读图后输出你的最终判读。
 
 复核规则：
 - 重新独立读图：输出 text/confidence 必须由图中内容得出；图中不可见的内容，即使初读结果看起来合理，也不得保留。
 - 只输出图中可见文字；保留原换行与标点；不改写、不纠错、不补全、不润色。
+- 对笔画密集的小字逐字读，保留术语的具体用字。只要仍有局部字形难辨，输出 uncertain，不能用相近术语代填。
+- 核对每行首尾，保留末尾字母、数字和符号。无法确认整行时，不要把只读出一部分的结果标为 recognized。
 - 编号原样转写。
 - 无法辨认输出 status:"unreadable"；确定非文字输出 status:"nonText"。`
 

@@ -57,6 +57,218 @@ void main() {
       await Future.wait([textFont.load(), iconFont.load()]);
     });
   }
+  testWidgets('预览长按和选择删页：确认、至少一页、撤销和只读', (tester) async {
+    final controller = _controller(3);
+    addTearDown(controller.dispose);
+    var navigations = 0;
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: RepaintBoundary(
+              key: boundaryKey,
+              child: SizedBox(
+                width: 280,
+                height: 620,
+                child: PageOverview(
+                  controller: controller,
+                  onClose: () {},
+                  onNavigate: () => navigations++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.longPress(find.byKey(const ValueKey('page-preview-p-1')));
+    await tester.pump();
+    expect(find.text('已选 1 页 · 点按勾选页面'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('page-preview-p-2')));
+    await tester.pump();
+    expect(find.text('已选 2 页 · 点按勾选页面'), findsOneWidget);
+    expect(navigations, 0);
+    if (const bool.fromEnvironment('FLOWMUSE_PAGE_NAV_SCREENSHOTS')) {
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      await tester.runAsync(() async {
+        final boundary =
+            boundaryKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
+        final image = await boundary.toImage(pixelRatio: 2);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await File(
+          'build/page-preview-delete.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    await tester.tap(find.byKey(const ValueKey('page-preview-p-0')));
+    await tester.pump();
+    expect(find.text('至少保留一页'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '删除所选 3 页'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.byKey(const ValueKey('page-preview-p-0')));
+    await tester.pump();
+    await tester.tap(find.text('删除所选 2 页'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除 2 页？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages, hasLength(3));
+    expect(controller.historyManager.canUndo, isFalse);
+    await tester.tap(find.text('删除所选 2 页'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.map((page) => page.id), ['p-0']);
+    expect(find.byKey(const ValueKey('page-preview-p-1')), findsNothing);
+    expect(find.text('选择'), findsNothing);
+    expect(find.text('第 1 / 1 页 · 输入页码跳转'), findsOneWidget);
+    controller.undo();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('page-preview-p-1')), findsOneWidget);
+    expect(controller.historyManager.canUndo, isFalse);
+    controller.toggleViewMode();
+    await tester.pump();
+    expect(find.text('选择'), findsNothing);
+    await tester.longPress(find.byKey(const ValueKey('page-preview-p-1')));
+    await tester.pump();
+    expect(find.byType(Checkbox), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('确认期间页面被删除，不会按过期页码删除其他页', (tester) async {
+    final controller = _controller(3);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 280,
+            height: 620,
+            child: PageOverview(controller: controller, onClose: () {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('选择'));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('page-preview-p-1')));
+    await tester.pump();
+    await tester.tap(find.text('删除所选 1 页'));
+    await tester.pumpAndSettle();
+    controller.deletePage('p-1');
+    await tester.pump();
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.map((page) => page.id), ['p-0', 'p-2']);
+    expect(find.text('已选 0 页 · 点按勾选页面'), findsOneWidget);
+    expect(find.text('页面已变化或正在编辑，请重新选择后重试'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('页码与手指绘制并排，Agent 展开和窄屏时仍可翻页及提问', (tester) async {
+    final controller = _controller(4);
+    controller.renameDocument('分页测试笔记');
+    addTearDown(controller.dispose);
+    await tester.binding.setSurfaceSize(const Size(1280, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var asked = 0;
+    Future<void> showEditor({bool agent = false}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MarkdrawEditor(
+            controller: controller,
+            onFingerDrawingEnabledChanged: (_) {},
+            onStartCollaboration: () async {},
+            onLeaveCollaboration: () async {},
+            onAskCurrentPage: () => asked++,
+            assistantPanel: agent ? const Text('Agent') : null,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final pages = find.byType(PageNavigationControls);
+    final fingerDrawing = find.byType(Switch);
+    Finder button(String label) => find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.label == label,
+    );
+    await showEditor();
+    expect(
+      tester.getCenter(pages).dy,
+      closeTo(tester.getCenter(fingerDrawing).dy, 1),
+    );
+    expect(
+      tester.getRect(pages).left,
+      greaterThan(tester.getRect(fingerDrawing).right),
+    );
+    expect(
+      tester.getRect(pages).overlaps(tester.getRect(find.text('分页测试笔记'))),
+      isFalse,
+    );
+    expect(
+      tester.getRect(pages).overlaps(tester.getRect(find.text('创建房间'))),
+      isFalse,
+    );
+    expect(button('问这一页'), findsOneWidget);
+    expect(
+      tester
+          .getRect(pages)
+          .overlaps(tester.getRect(find.byType(DesktopToolbar))),
+      isFalse,
+    );
+
+    await showEditor(agent: true);
+    final dock = find.byKey(const ValueKey('editor-assistant-panel'));
+    expect(tester.getRect(pages).overlaps(tester.getRect(dock)), isFalse);
+    expect(
+      tester.getCenter(pages).dy,
+      closeTo(tester.getCenter(fingerDrawing).dy, 1),
+    );
+    expect(button('多页预览'), findsOneWidget);
+    await tester.tap(button('更多页面操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('问这一页'));
+    await tester.pumpAndSettle();
+    expect(asked, 1);
+
+    await tester.binding.setSurfaceSize(const Size(390, 780));
+    await showEditor();
+    expect(
+      tester.getRect(pages).top,
+      greaterThanOrEqualTo(tester.getRect(fingerDrawing).bottom),
+    );
+    expect(
+      tester
+          .getRect(pages)
+          .overlaps(tester.getRect(find.byType(CompactToolbar))),
+      isFalse,
+    );
+    await tester.tap(button('下一页'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 4'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('page input validates bounds and navigates a large document', (
     tester,
   ) async {

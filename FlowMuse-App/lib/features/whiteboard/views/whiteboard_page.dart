@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -56,12 +57,15 @@ import '../view_models/whiteboard_view_model.dart';
 import '../view_models/local_draft_persistence.dart';
 import '../repositories/whiteboard_scene_repository.dart';
 import '../models/editor_preferences.dart';
+import '../models/local_note_layout.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../ai_assistant/models/ai_agent_models.dart';
+import '../ai_assistant/models/ai_source_location.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
+import '../ai_assistant/repositories/ai_context_source.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
 import '../ai_assistant/repositories/visual_attachment_capture.dart';
 import '../ai_assistant/views/ai_agent_dialog.dart';
@@ -69,6 +73,7 @@ import '../ai_assistant/views/region_capture_overlay.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
 import 'collaboration_focus_target.dart';
+import 'note_split_workspace.dart';
 import '../smart_layout/session/smart_layout_real_wiring.dart';
 import '../smart_layout/views/smart_layout_session_panel.dart';
 import '../collaboration/collaboration_config.dart';
@@ -131,7 +136,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final RemoteWetInkStore _remoteWetInkStore;
   StreamSubscription<DecodedLiveInkChunk>? _liveInkSubscription;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
-  StreamSubscription<ExcalidrawScene>? _fileStatusSceneSubscription;
+  StreamSubscription<List<Map<String, Object?>>>? _fileStatusSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomRemovedSubscription;
@@ -139,7 +144,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
   Timer? _loadImagesTimer;
+  final _roomImageLoads = <String, Future<void>>{};
+  final _roomImageFailures = <String>{};
+  final _reportedRoomImageFailures = <String>{};
+  bool _preparingRoomImages = false;
+  bool _exportingPdf = false;
+  bool _joinedRoomScene = false;
+  static const _roomImageConcurrency = 2;
   bool _loadingScene = false;
+  NoteItem? _referenceNote;
   String? _openingMessage = '正在打开笔记…';
   String? _openError;
   double? _openingProgress;
@@ -162,8 +175,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _disposingOrLeaving = false;
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
-  OverlayEntry? _aiPanelEntry;
+  AiAgentPanel? _aiPanel;
+  final _aiTextSelectionSource = ValueNotifier<AiAgentSource?>(null);
+  Set<ElementId> _lastAiSelection = const {};
+  bool _aiPanelExpanded = false;
   bool _aiCaptureModeActive = false;
+  AiSourceLocation? _viewedAiSource;
 
   // V3 智能排版会话（V3-505C 真实入口）：真实依赖装配 + 非模态面板。
   SmartLayoutRealSessionScope? _smartLayoutV3Scope;
@@ -177,6 +194,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _applyingFollowViewport = false;
   (Rect, Size)? _lastFollowView;
   ViewportState? _lastCollaborationViewport;
+  Size? _lastRoomImageCanvasSize;
   Set<ElementId>? _lastPresenceSelection;
   ElementId? _lastPresenceText;
   Timer? _boundsBroadcastTimer;
@@ -217,6 +235,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return stampCreatorOnResult(result, scene, creator);
     };
     _markdrawController.addListener(_onControllerNotifyForFocus);
+    _markdrawController.addListener(_onAiSelectionChanged);
     _markdrawController.addListener(_scheduleReadingPosition);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
@@ -281,7 +300,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void dispose() {
     _socialInboxPresenter.detach(this);
     WidgetsBinding.instance.removeObserver(this);
-    _closeAiPanel();
+    _handleRegionCancel();
     _disposingOrLeaving = true;
     _saveReadingPosition(force: true);
     _readingPositionTimer?.cancel();
@@ -292,7 +311,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _boundsBroadcastTimer?.cancel();
     _attentionExpiry?.cancel();
     unawaited(_collaborationSubscription?.cancel());
-    unawaited(_fileStatusSceneSubscription?.cancel());
+    unawaited(_fileStatusSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomEndedSubscription?.cancel());
     unawaited(_roomRemovedSubscription?.cancel());
@@ -306,6 +325,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _remoteCollaborators.dispose();
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
+    _markdrawController.removeListener(_onAiSelectionChanged);
+    _aiTextSelectionSource.dispose();
     _markdrawController.removeListener(_scheduleReadingPosition);
     _markdrawController.removeListener(_onControllerNotifyForCollaboration);
     _smartLayoutV3Scope?.dispose();
@@ -323,6 +344,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _openNote() async {
     if (!mounted) return;
+    _joinedRoomScene = false;
+    if (_aiPanel != null) _closeAiPanel();
     final generation = ++_openGeneration;
     _readingPositionTimer?.cancel();
     _readingNoteId = null;
@@ -334,6 +357,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         (pendingPdf.noteId == null || pendingPdf.noteId == widget.noteId);
     setState(() {
       _loadingScene = true;
+      _referenceNote = null;
       _openError = null;
       _openingProgress = null;
       _openingPdf = importingPdf;
@@ -401,7 +425,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       'found=${note != null} noteType=${note?.noteType.name} '
       'pageTemplate=${note?.pageTemplate.name}',
     );
-    _markdrawController.setLayout(_layoutForNote(note));
+    _markdrawController.setLayout(layoutForLocalNote(note));
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote layout '
       'type=${_markdrawController.layout.type.name} '
@@ -659,6 +683,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (!_localDraftDirty || !mounted || widget.temporaryCollaboration) {
       return _localDraftSave ?? Future<void>.value();
     }
+    if (_joinedRoomScene && _missingRoomImages().any(_isPdfRoomImage)) {
+      return _localDraftSave ?? Future<void>.value();
+    }
     final noteId = widget.noteId;
     final revision = _localDraftRevision;
     final content = _markdrawController.serializeSceneForPersistence();
@@ -763,6 +790,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return;
     }
 
+    if (!await _ensureRoomImages()) {
+      throw StateError('协作附件未完整加载');
+    }
     await _flushLocalDraft();
   }
 
@@ -926,126 +956,176 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _saveMarkdrawScene();
   }
 
-  Future<void> _toggleAiAgent() async {
-    if (_aiPanelEntry != null) {
-      _closeAiPanel();
+  void _toggleAiAgent() {
+    if (_viewedAiSource != null) {
+      _returnToAiReply();
       return;
     }
-    final initialContext = await _currentAiAgentContext();
-    if (!mounted) return;
-    final repository = ref.read(aiAgentRepositoryProvider);
-    final entry = OverlayEntry(
-      builder: (overlayContext) {
-        final size = MediaQuery.sizeOf(overlayContext);
-        final padding = MediaQuery.paddingOf(overlayContext);
-        final keyboardInset = MediaQuery.viewInsetsOf(overlayContext).bottom;
-        final safeTop = padding.top + 16;
-        final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
-        final availableHeight = max(0.0, size.height - safeTop - safeBottom);
-        final panelWidth = size.width >= 900
-            ? 420.0
-            : min(360.0, size.width - 24);
-        final panelHeight = min(520.0, availableHeight);
-        final verticalSpace = availableHeight - panelHeight;
-        final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
-        return Positioned(
-          top: panelTop,
-          right: 12,
-          width: panelWidth,
-          height: panelHeight,
-          child: Visibility(
-            visible: !_aiCaptureModeActive,
-            maintainState: true,
-            maintainAnimation: true,
-            child: Material(
-              elevation: 12,
-              shadowColor: Colors.black38,
-              clipBehavior: Clip.antiAlias,
-              borderRadius: BorderRadius.circular(12),
-              child: AiAgentPanel(
-                repository: repository,
-                noteTitle: initialContext.noteTitle,
-                texts: initialContext.texts,
-                contextTruncated: initialContext.truncated,
-                contextLabel: initialContext.label,
-                hasSelection: initialContext.hasSelection,
-                onCaptureSelection: () =>
-                    captureSelectionAttachment(_markdrawController),
-                onCaptureCurrentPdfPage: () =>
-                    captureCurrentPdfPageAttachment(_markdrawController),
-                onRegionCapture: () => _startRegionCapture(),
-                contextProvider: _currentAiAgentContext,
-                promptStore: defaultAiPromptStore,
-                speechRecognitionService: _speechRecognitionService,
-                onApply: _applyAiAgentResponse,
-                onClose: _closeAiPanel,
+    if (_aiPanel != null) {
+      if (_aiPanelExpanded) {
+        _collapseAiPanel();
+      } else {
+        setState(() {
+          _aiPanelExpanded = true;
+          _aiSpeechInputActive = true;
+        });
+        unawaited(_speechRecognitionService.cancel());
+      }
+      return;
+    }
+    final hasSelection = _markdrawController.selectedElements.any(
+      (element) => !element.isDeleted,
+    );
+    _openAiAgent(hasSelection ? AiAgentScope.selection : AiAgentScope.none);
+  }
+
+  void _onAiSelectionChanged() {
+    final selected = _markdrawController.editorState.selectedIds;
+    final previous = _lastAiSelection;
+    if (identical(selected, previous)) return;
+    _lastAiSelection = selected;
+    if (!_aiPanelExpanded ||
+        _aiCaptureModeActive ||
+        _smartLayoutV3PanelVisible ||
+        _viewedAiSource != null ||
+        _loadingScene ||
+        _applyingRemoteScene ||
+        _disposingOrLeaving ||
+        selected.isEmpty ||
+        setEquals(selected, previous)) {
+      return;
+    }
+    runWhenContextStable(context, () {
+      if (!_aiPanelExpanded || !identical(selected, _lastAiSelection)) return;
+      try {
+        _aiTextSelectionSource.value = readAiAgentSource(
+          _markdrawController,
+          AiAgentScope.selection,
+          selectionTextOnly: true,
+        );
+      } on StateError {
+        // A selection without readable text leaves the locked source alone.
+      }
+    });
+  }
+
+  void _openAiAgent(AiAgentScope scope, {String? instruction}) {
+    if (_aiCaptureModeActive || _loadingScene || _openError != null) return;
+    final AiAgentSource source;
+    try {
+      source = readAiAgentSource(_markdrawController, scope);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+      return;
+    }
+    final initialContext = source.context;
+    final panel = AiAgentPanel(
+      key: _aiPanel?.key ?? UniqueKey(),
+      repository: ref.read(aiAgentRepositoryProvider),
+      noteTitle: initialContext.noteTitle,
+      texts: initialContext.texts,
+      contextTruncated: initialContext.truncated,
+      contextLabel: initialContext.label,
+      hasSelection: initialContext.hasSelection,
+      onRegionCapture: _startRegionCapture,
+      initialSourceCapture: source.capture,
+      initialSourceLocation: source.location,
+      automaticTextSource: _aiTextSelectionSource,
+      initialInstruction:
+          instruction ?? (scope == AiAgentScope.selection ? '解释这段内容' : null),
+      sourceProvider: (scope) => readAiAgentSource(_markdrawController, scope),
+      promptStore: defaultAiPromptStore,
+      speechRecognitionService: _speechRecognitionService,
+      onApply: _applyAiAgentResponse,
+      onViewSource: _viewAiSource,
+      onClose: _collapseAiPanel,
+    );
+    setState(() {
+      _aiPanel = panel;
+      _aiPanelExpanded = true;
+      _viewedAiSource = null;
+      _aiSpeechInputActive = true;
+    });
+    unawaited(_speechRecognitionService.cancel());
+  }
+
+  void _collapseAiPanel() {
+    if (_aiCaptureModeActive) _handleRegionCancel();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _aiPanelExpanded = false;
+      _viewedAiSource = null;
+    });
+    unawaited(_finishAiSpeechInput());
+  }
+
+  void _returnToAiReply() => setState(() => _viewedAiSource = null);
+
+  String? _viewAiSource(AiSourceLocation source) {
+    final controller = _markdrawController;
+    if (controller.isDisposed ||
+        controller.canvasSize.isEmpty ||
+        controller.pageNavigationBusy ||
+        controller.editingTextElementId != null) {
+      return '画布正在编辑，请完成当前操作后再定位';
+    }
+    final bounds = resolveAiSourceBounds(controller, source);
+    if (bounds == null || !bounds.isFinite) {
+      return '来源已删除或所在页面已变化';
+    }
+    _stopFollowing();
+    if (source case AiPageSource(:final pageId)) {
+      if (!controller.navigateToPage(pageId, fit: true)) {
+        return '无法打开来源页面';
+      }
+    } else {
+      final viewport = viewportForCollaborationBounds(
+        bounds.inflate(24),
+        controller.canvasSize,
+      );
+      if (viewport == null) return '当前画布无法定位来源';
+      controller.setViewport(viewport);
+    }
+    setState(() => _viewedAiSource = source);
+    return null;
+  }
+
+  Widget _buildAiSourceHighlight(ViewportState viewport) {
+    final source = _viewedAiSource;
+    if (source == null) return const SizedBox.shrink();
+    final bounds = resolveAiSourceBounds(_markdrawController, source);
+    if (bounds == null || !bounds.isFinite) return const SizedBox.shrink();
+    final rect = Rect.fromPoints(
+      viewport.sceneToScreen(bounds.topLeft),
+      viewport.sceneToScreen(bounds.bottomRight),
+    ).inflate(4);
+    final color = Theme.of(context).colorScheme.primary;
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned.fromRect(
+            rect: rect,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: color, width: 2),
+                borderRadius: BorderRadius.circular(4),
               ),
             ),
           ),
-        );
-      },
-    );
-    _aiPanelEntry = entry;
-    _aiSpeechInputActive = true;
-    unawaited(_speechRecognitionService.cancel());
-    setState(() {});
-    Overlay.of(context).insert(entry);
-  }
-
-  Future<AiAgentContextSnapshot> _currentAiAgentContext() async {
-    final selectedElements = _markdrawController.selectedElements
-        .where((element) => !element.isDeleted)
-        .toList();
-    final selectedTexts = selectedElements
-        .whereType<editor_core.TextElement>()
-        .toList();
-    final sourceTexts = selectedTexts.isNotEmpty
-        ? selectedTexts
-        : _markdrawController.editorState.scene.elements
-              .whereType<editor_core.TextElement>()
-              .where((element) => !element.isDeleted)
-              .toList();
-    sourceTexts.sort((left, right) {
-      final page = _aiPageIndex(left).compareTo(_aiPageIndex(right));
-      if (page != 0) return page;
-      final y = left.y.compareTo(right.y);
-      return y != 0 ? y : left.x.compareTo(right.x);
-    });
-    final noteContext = AiNoteContext.fromTexts(
-      sourceTexts.map(
-        (element) => AiNoteText(
-          id: element.id.value,
-          text: element.text,
-          pageIndex: _aiPageIndex(element),
-          x: element.x,
-          y: element.y,
-        ),
+        ],
       ),
-    );
-    final visualSelected = selectedElements
-        .where((element) => element is! editor_core.TextElement)
-        .toList();
-    final noteTitle = _markdrawController.documentName ?? '未命名笔记';
-    final contextLabel = selectedTexts.isEmpty
-        ? sourceTexts.isEmpty
-              ? '当前笔记（暂无文字）'
-              : '整篇笔记（${sourceTexts.length} 个文本框）'
-        : '当前选区（${selectedTexts.length} 个文本框）';
-    // 视觉附件由面板经 onCaptureSelection/onCaptureCurrentPdfPage 回调
-    // 驱动捕获并驻留附件条状态（T6'），快照不再承载附件。
-    return (
-      noteTitle: noteTitle,
-      texts: noteContext.texts,
-      truncated: noteContext.truncated,
-      label: contextLabel,
-      hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
     );
   }
 
   void _closeAiPanel() {
     if (_aiCaptureModeActive) _handleRegionCancel();
-    _aiPanelEntry?.remove();
-    _aiPanelEntry = null;
+    setState(() {
+      _aiPanel = null;
+      _aiPanelExpanded = false;
+      _viewedAiSource = null;
+    });
     unawaited(_finishAiSpeechInput());
   }
 
@@ -1055,22 +1135,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final completer = Completer<AiVisualAttachment?>();
     _regionCaptureCompleter = completer;
     setState(() => _aiCaptureModeActive = true);
-    _aiPanelEntry?.markNeedsBuild();
     try {
       return await completer.future;
     } finally {
       _regionCaptureCompleter = null;
       if (mounted) setState(() => _aiCaptureModeActive = false);
-      _aiPanelEntry?.markNeedsBuild();
     }
   }
 
-  /// 覆盖层提交：屏幕矩形 → 场景矩形 → 捕获管线；错误转失败结果（面板错误容器展示）。
-  Future<void> _handleRegionSelected(Rect screenRect) async {
+  /// 将画布局部矩形按实际绘制的视口换算为场景矩形。
+  Future<void> _handleRegionSelected(
+    ViewportState viewport,
+    Rect canvasRect,
+  ) async {
     final completer = _regionCaptureCompleter;
     if (completer == null || completer.isCompleted) return;
-    final viewport = _markdrawController.editorState.viewport;
-    final sceneRect = sceneRectFromScreenRect(viewport, screenRect);
+    final sceneRect = sceneRectFromScreenRect(viewport, canvasRect);
     try {
       final attachment = await captureSceneRectAttachment(
         _markdrawController,
@@ -1079,7 +1159,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (completer.isCompleted) return;
       completer.complete(attachment);
     } catch (error) {
-      completer.completeError(error);
+      if (!completer.isCompleted) completer.completeError(error);
     }
   }
 
@@ -1093,22 +1173,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _finishAiSpeechInput() async {
     await _speechRecognitionService.cancel();
-    if (mounted) setState(() => _aiSpeechInputActive = false);
-  }
-
-  int _aiPageIndex(editor_core.TextElement element) {
-    final pages = _markdrawController.layout.pages;
-    final pageId = element.pageId;
-    if (pageId != null) {
-      final index = pages.indexWhere((page) => page.id == pageId);
-      if (index >= 0) return index;
+    if (mounted && !_aiPanelExpanded) {
+      setState(() => _aiSpeechInputActive = false);
     }
-    final center = Offset(
-      element.x + element.width / 2,
-      element.y + element.height / 2,
-    );
-    final index = pages.indexWhere((page) => page.bounds.contains(center));
-    return index < 0 ? 0 : index;
   }
 
   /// V3 智能排版入口（V3-505C）：以当前页建立真实会话装配（真实
@@ -1146,6 +1213,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
+    if (response.actions.singleOrNull case AiAgentAction(
+      tool: AiAgentTool.draftNote,
+      :final value,
+    )) {
+      _markdrawController.insertNoteDraft([
+        ...parseNoteDraft(value),
+        if (response.webSources.isNotEmpty) ...[
+          (role: NoteDraftRole.section, text: '网页参考资料'),
+          for (final source in response.webSources)
+            (
+              role: NoteDraftRole.bullet,
+              text: '${source.title}\n${source.url}',
+            ),
+        ],
+      ]);
+      return;
+    }
     if (response.actions.any(
       (action) => action.tool == AiAgentTool.smartLayout,
     )) {
@@ -1215,7 +1299,110 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
+  bool _blockCollaborationWhileSplit() {
+    if (_referenceNote == null) return false;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('请先关闭参考笔记，再开启实时协作')));
+    return true;
+  }
+
+  bool _splitBlockedByCollaboration(WhiteboardState state) =>
+      _collaborationOpening ||
+      state.activeRoom != null ||
+      state.collaborating ||
+      state.collaborationStatus == WhiteboardCollaborationStatus.connecting;
+
+  Future<void> _chooseReferenceNote() async {
+    if (!_canMutateWhiteboard ||
+        _loadingScene ||
+        widget.temporaryCollaboration ||
+        _splitBlockedByCollaboration(ref.read(whiteboardViewModelProvider))) {
+      return;
+    }
+    final generation = _openGeneration;
+    final noteId = widget.noteId;
+    final index = ref.read(libraryIndexProvider).asData?.value;
+    if (index == null) return;
+    var query = '';
+    final selected = await showDialog<NoteItem>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) {
+          final choices = index
+              .notesForQuery(LibraryQuery(queryText: query))
+              .where((note) => note.id != noteId)
+              .toList();
+          return AlertDialog(
+            title: const Text('并排打开'),
+            content: SizedBox(
+              width: 440,
+              height: 340,
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      labelText: '搜索本地笔记和 PDF',
+                    ),
+                    onChanged: (text) => update(() => query = text),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: choices.isEmpty
+                        ? Center(
+                            child: Text(
+                              query.trim().isEmpty ? '资料库里还没有其他笔记' : '没有匹配的笔记',
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: choices.length,
+                            itemBuilder: (context, i) {
+                              final note = choices[i];
+                              return ListTile(
+                                leading: Icon(
+                                  note.kind == LibraryFilter.pdf
+                                      ? Icons.picture_as_pdf_outlined
+                                      : Icons.description_outlined,
+                                ),
+                                title: Text(
+                                  note.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () =>
+                                    Navigator.of(dialogContext).pop(note),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (selected == null ||
+        !_isCurrentOpen(generation) ||
+        _splitBlockedByCollaboration(ref.read(whiteboardViewModelProvider))) {
+      return;
+    }
+    final current = ref.read(libraryIndexProvider).asData?.value;
+    final note = current?.activeNotes
+        .where((item) => item.id == selected.id)
+        .firstOrNull;
+    if (note != null) setState(() => _referenceNote = note);
+  }
+
   Future<void> _startCollaboration() async {
+    if (_blockCollaborationWhileSplit()) return;
     final currentStatus = ref
         .read(whiteboardViewModelProvider)
         .collaborationStatus;
@@ -1224,7 +1411,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return;
     }
     final maxParticipants = await _confirmCreateCollaborationRoom();
-    if (maxParticipants == null || !mounted) {
+    if (maxParticipants == null ||
+        !mounted ||
+        _blockCollaborationWhileSplit()) {
       return;
     }
     _remoteWetInkStore
@@ -1239,6 +1428,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         .startCollaboration(
           initialScene: _collaborationAdapter.currentScene(),
           maxParticipants: maxParticipants,
+          fileUploadPriority: _initialRoomImagePriority(),
         );
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
@@ -1251,6 +1441,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _promptJoinCollaboration() async {
+    if (_blockCollaborationWhileSplit()) return;
     final currentState = ref.read(whiteboardViewModelProvider);
     if (currentState.collaborating ||
         currentState.collaborationStatus ==
@@ -1407,7 +1598,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _joinCollaboration(CollaborationRoom room) async {
-    if (_collaborationOpening) {
+    if (_collaborationOpening || _blockCollaborationWhileSplit()) {
       return;
     }
     _collaborationOpening = true;
@@ -1466,8 +1657,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         return;
       }
       if (save) {
-        await _saveTemporaryRoomAsLocalNote();
+        if (!await _saveTemporaryRoomAsLocalNote()) return;
       }
+    } else if (!widget.temporaryCollaboration && !await _ensureRoomImages()) {
+      return;
     }
     _disposingOrLeaving = true;
     _markdrawController.closeTransientUiForSceneReplace();
@@ -1479,6 +1672,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<bool> _prepareToOpenFriendInvitation() async {
     if (!_canMutateWhiteboard ||
+        _blockCollaborationWhileSplit() ||
         _handlingBack ||
         _collaborationOpening ||
         _openingMessage != null) {
@@ -1498,7 +1692,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           return false;
         }
       }
-      if (saveTemporary) await _saveTemporaryRoomAsLocalNote();
+      if (saveTemporary && !await _saveTemporaryRoomAsLocalNote()) return false;
       if (!widget.temporaryCollaboration) {
         // Flush even if a previous auto-save failed after clearing its flag.
         _localDraftDirty = true;
@@ -1580,7 +1774,29 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         }
         return;
       }
-      await _finalizeLocalDraftBeforeLeaving();
+      if (_joinedRoomScene && _missingRoomImages().any(_isPdfRoomImage)) {
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('PDF 底图未加载完整'),
+            content: const Text('房间已断开。退出会保留上次保存的本地版本。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('退出'),
+              ),
+            ],
+          ),
+        );
+        if (discard != true || !_canMutateWhiteboard) return;
+        _localDraftDirty = false;
+      } else {
+        await _finalizeLocalDraftBeforeLeaving();
+      }
       _disposingOrLeaving = true;
       _markdrawController.closeTransientUiForSceneReplace();
       _popWhenStable();
@@ -1632,8 +1848,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomSocketIds = {};
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
-    await _fileStatusSceneSubscription?.cancel();
-    _fileStatusSceneSubscription = null;
+    await _fileStatusSubscription?.cancel();
+    _fileStatusSubscription = null;
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = null;
     await _roomEndedSubscription?.cancel();
@@ -1701,8 +1917,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
-  Future<void> _saveTemporaryRoomAsLocalNote() async {
+  Future<bool> _saveTemporaryRoomAsLocalNote() async {
+    if (!await _ensureRoomImages() || !_canMutateWhiteboard) return false;
     final layout = _markdrawController.layout;
+    final content = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
     final note = await ref
         .read(libraryIndexProvider.notifier)
         .createNote(
@@ -1710,14 +1930,29 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           pageTemplate: PageTemplate.values.byName(layout.template.name),
           pageFlow: PageFlow.values.byName(layout.pageFlow.name),
         );
-    final content = _markdrawController.serializeScene(
-      format: DocumentFormat.excalidraw,
-    );
     await ref
         .read(whiteboardSceneRepositoryProvider)
         .saveScene(note.id, content);
     await _touchNoteWithCurrentCover(note.id);
     _temporarySaved = true;
+    return true;
+  }
+
+  Future<void> _saveDrawingAs() async {
+    try {
+      if (!await _ensureRoomImages() || !_canMutateWhiteboard) return;
+      final saved = await _fileHandler.saveAs();
+      if (!mounted || !saved || kIsWeb) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已保存绘图副本')));
+    } catch (error) {
+      debugPrint('[FlowMuseSaveAs] ${error.runtimeType}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('另存为失败，请重试')));
+    }
   }
 
   Future<void> _openExternalSceneAsLocalNote() async {
@@ -1822,6 +2057,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<SharePayload?> _buildSharePayload(_ShareSelection selection) async {
+    if (selection != _ShareSelection.invitation && !await _ensureRoomImages()) {
+      return null;
+    }
+    if (!mounted) return null;
     final exporter = ShareExportCoordinator();
     switch (selection) {
       case _ShareSelection.png:
@@ -1892,12 +2131,44 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             });
           },
         );
-    await _fileStatusSceneSubscription?.cancel();
-    _fileStatusSceneSubscription = _collaborationRepository.fileStatusScenes
-        .listen((scene) {
+    await _fileStatusSubscription?.cancel();
+    _fileStatusSubscription = _collaborationRepository.fileStatusUpdates.listen(
+      (statusUpdates) {
+        if (!current()) return;
+        _runAfterStableFrame(() {
           if (!current()) return;
-          _enqueueRemoteScene(scene, loadImages: false, reconcile: false);
+          final editorScene = _markdrawController.currentScene;
+          final updates = <editor_core.ImageElement>[];
+          for (final update in statusUpdates) {
+            final image = editorScene.getElementById(
+              editor_core.ElementId(update['id'] as String),
+            );
+            if (image is! editor_core.ImageElement ||
+                image.isDeleted ||
+                image.fileId != update['fileId']) {
+              continue;
+            }
+            final version = update['version'] as int;
+            updates.add(
+              image
+                  .copyWithImage(status: update['status'] as String)
+                  .copyWith(
+                    version: max(image.version, version),
+                    versionNonce: image.version > version
+                        ? image.versionNonce
+                        : update['versionNonce'] as int,
+                  ),
+            );
+          }
+          // Upload status changes do not warrant rewriting the local PDF.
+          _markdrawController.applyRemoteElements(
+            updates,
+            notifySceneChange: false,
+          );
+          _previousEditorScene = _markdrawController.currentScene;
         });
+      },
+    );
     await _roomUsersSubscription?.cancel();
     void applyRoomUsers(List<RoomCollaborator> users) {
       if (!current()) return;
@@ -1971,6 +2242,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           });
           if (status == RealtimeConnectionStatus.joined &&
               previous == RealtimeConnectionStatus.reconnecting) {
+            _roomImageFailures.clear();
+            _reportedRoomImageFailures.clear();
+            _scheduleLoadImageFiles();
             unawaited(_refreshCollaborationSnapshot(room));
             _broadcastIdleState(_lastIdleState ?? 'active', force: true);
             _broadcastVisibleSceneBounds(
@@ -2018,7 +2292,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final save = await _showRoomEndedDialog(removed: removed);
     if (!_canMutateWhiteboard || generation != _openGeneration) return;
     if (save == true) {
-      await _saveTemporaryRoomAsLocalNote();
+      if (!await _saveTemporaryRoomAsLocalNote()) return;
     }
     if (widget.temporaryCollaboration && mounted) {
       _disposingOrLeaving = true;
@@ -2315,6 +2589,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void _resetRemoteUpdates() {
     _resetCollaborationView();
     _remoteApplyGeneration++;
+    _loadImagesTimer?.cancel();
+    _loadImagesTimer = null;
+    _roomImageLoads.clear();
+    _roomImageFailures.clear();
+    _reportedRoomImageFailures.clear();
+    _preparingRoomImages = false;
     _remoteMergeTimer?.cancel();
     _remoteMergeTimer = null;
     _remoteMergeBuffer.clear();
@@ -2369,7 +2649,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _enqueueRemoteScene(
     ExcalidrawScene remoteScene, {
-    bool loadImages = true,
     bool reconcile = true,
     bool replaceLayout = false,
   }) {
@@ -2385,6 +2664,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           await _runAfterStableFrameAsync(() async {
             if (generation != _remoteApplyGeneration) return;
             if (replaceLayout) {
+              _joinedRoomScene = true;
               // 房间没有页面标记时是无限画布，不能沿用加入前的本机版式。
               _markdrawController.setLayout(
                 const CanvasLayout(type: CanvasLayoutType.unbounded),
@@ -2400,9 +2680,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 fit: true,
               );
             }
-            if (loadImages) {
-              _scheduleLoadImageFiles();
-            }
+            _scheduleLoadImageFiles();
           });
         })
         .catchError(_reportRemoteSceneFutureError);
@@ -2601,84 +2879,287 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     return _collaborationAdapter.currentScene();
   }
 
+  Iterable<editor_core.ImageElement> _missingRoomImages() {
+    final scene = _markdrawController.currentScene;
+    return scene.elements.whereType<editor_core.ImageElement>().where(
+      (image) => !image.isDeleted && !scene.files.containsKey(image.fileId),
+    );
+  }
+
+  bool _isPdfRoomImage(editor_core.ImageElement image) => image.isPdfBackground;
+
+  Rect get _roomImageViewport => _markdrawController.editorState.viewport
+      .visibleRect(_markdrawController.canvasSize);
+
+  List<String> _initialRoomImagePriority() {
+    final layout = _markdrawController.layout;
+    if (!layout.isPaged || layout.pages.isEmpty) return const [];
+    final first = layout.pages.first;
+    final current = layout.pageForVisibleRect(_roomImageViewport) ?? first;
+    final images = _markdrawController.currentScene.elements
+        .whereType<editor_core.ImageElement>();
+    return [
+      for (final pageId in {current.id, first.id})
+        for (final image in images)
+          if (image.isPdfBackground &&
+              !image.isDeleted &&
+              image.pageId == pageId)
+            image.fileId,
+    ];
+  }
+
   void _scheduleLoadImageFiles() {
-    if (_loadImagesTimer?.isActive ?? false) {
+    if (_loadImagesTimer != null ||
+        _preparingRoomImages ||
+        !_canMutateWhiteboard ||
+        ref.read(whiteboardViewModelProvider).activeRoom == null) {
       return;
     }
-    _loadImagesTimer = Timer(const Duration(milliseconds: 500), () {
+    _loadImagesTimer = Timer(const Duration(milliseconds: 32), () {
       _loadImagesTimer = null;
-      unawaited(_loadMissingImageFiles());
+      _loadVisibleRoomImages();
     });
   }
 
-  Future<void> _loadMissingImageFiles() async {
-    if (!_canMutateWhiteboard) {
-      return;
-    }
+  void _loadVisibleRoomImages() {
+    if (!_canMutateWhiteboard || _preparingRoomImages) return;
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
-    if (room == null) {
-      return;
-    }
-    final generation = _remoteApplyGeneration;
-    final scene = _markdrawController.currentScene;
-    final result = await _collaborationRepository.loadMissingFiles(
-      room: room,
-      fileIds: [
-        for (final element
-            in scene.elements.whereType<editor_core.ImageElement>())
-          if (!element.isDeleted && element.status == 'saved') element.fileId,
-      ],
-      existingFileIds: scene.files.keys.toSet(),
+    if (room == null) return;
+    final viewport = _roomImageViewport;
+    final layout = _markdrawController.layout;
+    final page = layout.pageForVisibleRect(viewport);
+    final visible = <String>{};
+    final nearby = <String>{};
+    final viewBounds = Bounds.fromLTWH(
+      viewport.left,
+      viewport.top,
+      viewport.width,
+      viewport.height,
     );
-    if (!_canMutateWhiteboard ||
-        generation != _remoteApplyGeneration ||
-        (result.files.isEmpty && result.erroredFileIds.isEmpty)) {
-      return;
+    final nearbyPageIds = page == null
+        ? const <String>{}
+        : {
+            if (page.index > 0) layout.pages[page.index - 1].id,
+            if (page.index + 1 < layout.pages.length)
+              layout.pages[page.index + 1].id,
+          };
+    final allNeededForDraft = <String>{};
+    for (final image in _missingRoomImages()) {
+      if (image.status != 'saved') continue;
+      if (AlignmentUtils.visualBounds(image).intersects(viewBounds)) {
+        visible.add(image.fileId);
+      } else if (image.isPdfBackground &&
+          nearbyPageIds.contains(image.pageId)) {
+        nearby.add(image.fileId);
+      } else if (!image.isPdfBackground || !widget.temporaryCollaboration) {
+        allNeededForDraft.add(image.fileId);
+      }
     }
-    final latestScene = _collaborationAdapter.currentScene();
-    final nextScene = latestScene.copyWith(
-      files: {...latestScene.files, ...result.files},
-      elements: _markErroredImageFiles(
-        latestScene.elements,
-        result.erroredFileIds,
-      ),
-    );
-    _applyingRemoteScene = true;
-    try {
-      _collaborationAdapter.applyRemoteScene(
-        nextScene,
-        closeTransientUi: false,
+    final failed = visible.where(_roomImageFailures.contains).toSet();
+    _reportedRoomImageFailures.retainAll(failed);
+    if (failed.any((id) => !_reportedRoomImageFailures.contains(id))) {
+      _reportedRoomImageFailures.addAll(failed);
+      final generation = _remoteApplyGeneration;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('当前页面的图片加载失败'),
+          action: SnackBarAction(
+            label: '重试',
+            onPressed: () {
+              if (generation != _remoteApplyGeneration) return;
+              _roomImageFailures.removeAll(failed);
+              _reportedRoomImageFailures.removeAll(failed);
+              _scheduleLoadImageFiles();
+            },
+          ),
+        ),
       );
-      CollaborationDebugLog.write('file', 'remote_images_applied', {
-        'filesLoaded': result.files.length,
-        'filesErrored': result.erroredFileIds.length,
-      });
-    } finally {
-      _applyingRemoteScene = false;
+    }
+    for (final id in {...visible, ...nearby, ...allNeededForDraft}) {
+      if (_roomImageLoads.length >= _roomImageConcurrency) return;
+      if (_roomImageLoads.containsKey(id) || _roomImageFailures.contains(id)) {
+        continue;
+      }
+      // Leave a slot for a page jump while a prefetch is in flight.
+      if (!visible.contains(id) && _roomImageLoads.isNotEmpty) return;
+      _roomImageLoads[id] = _fetchRoomImage(room, id);
     }
   }
 
-  List<Map<String, Object?>> _markErroredImageFiles(
-    List<Map<String, Object?>> elements,
-    Set<String> erroredFileIds,
-  ) {
-    if (erroredFileIds.isEmpty) {
-      return elements;
+  Future<void> _fetchRoomImage(CollaborationRoom room, String fileId) async {
+    final generation = _remoteApplyGeneration;
+    bool current() =>
+        _canMutateWhiteboard &&
+        generation == _remoteApplyGeneration &&
+        identical(ref.read(whiteboardViewModelProvider).activeRoom, room);
+    try {
+      final result = await _collaborationRepository.loadMissingFiles(
+        room: room,
+        fileIds: [fileId],
+        existingFileIds: const {},
+      );
+      if (!current()) return;
+      if (result.files.isEmpty) {
+        _roomImageFailures.add(fileId);
+      } else {
+        _roomImageFailures.remove(fileId);
+        _markdrawController.applyRemoteImageFiles(result.files);
+      }
+    } catch (_) {
+      if (current()) _roomImageFailures.add(fileId);
+    } finally {
+      if (current()) {
+        _roomImageLoads.remove(fileId);
+        _scheduleLoadImageFiles();
+      }
     }
-    return [
-      for (final element in elements)
-        if (element['type'] == 'image' &&
-            element['fileId'] is String &&
-            erroredFileIds.contains(element['fileId']))
-          {
-            ...element,
-            'status': 'error',
-            'version': ((element['version'] as num?)?.toInt() ?? 1) + 1,
-            'updated': DateTime.now().millisecondsSinceEpoch,
+  }
+
+  Future<bool> _ensureRoomImages({bool allImages = false}) async {
+    if (!_canMutateWhiteboard) return false;
+    bool hasMissing() => _missingRoomImages().any(
+      (image) => allImages || _isPdfRoomImage(image),
+    );
+    if (!_joinedRoomScene || !hasMissing()) {
+      return true;
+    }
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (_preparingRoomImages) return false;
+    if (room != null) {
+      setState(() => _preparingRoomImages = true);
+      final generation = _remoteApplyGeneration;
+      final attempted = <String>{};
+      try {
+        while (_canMutateWhiteboard &&
+            generation == _remoteApplyGeneration &&
+            identical(ref.read(whiteboardViewModelProvider).activeRoom, room)) {
+          for (final image in _missingRoomImages()) {
+            if (_roomImageLoads.length >= _roomImageConcurrency) break;
+            final id = image.fileId;
+            if (image.status == 'saved' &&
+                !_roomImageLoads.containsKey(id) &&
+                attempted.add(id)) {
+              _roomImageLoads[id] = _fetchRoomImage(room, id);
+            }
           }
-        else
-          element,
-    ];
+          if (_roomImageLoads.isEmpty) break;
+          attempted.addAll(_roomImageLoads.keys);
+          await Future.any(_roomImageLoads.values.toList());
+        }
+      } finally {
+        if (generation == _remoteApplyGeneration && _canMutateWhiteboard) {
+          setState(() => _preparingRoomImages = false);
+          _scheduleLoadImageFiles();
+        }
+      }
+      if (!_canMutateWhiteboard || generation != _remoteApplyGeneration) {
+        return false;
+      }
+    }
+    if (!hasMissing()) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            allImages
+                ? '还有图片未同步，暂不能导出 PDF，请稍后重试'
+                : '还有 PDF 底图未同步，暂不能生成完整文件，请稍后重试',
+          ),
+        ),
+      );
+    }
+    return false;
+  }
+
+  Future<void> _exportWithRoomImages(Future<void> Function() export) async {
+    if (await _ensureRoomImages() && _canMutateWhiteboard) await export();
+  }
+
+  Future<void> _exportPdf() async {
+    if (_exportingPdf) return;
+    _exportingPdf = true;
+    final generation = _openGeneration;
+    var cancelled = false;
+    bool isCancelled() =>
+        cancelled || !_canMutateWhiteboard || generation != _openGeneration;
+    void message(String text) {
+      if (!isCancelled()) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(text)));
+      }
+    }
+
+    try {
+      if (!await _ensureRoomImages(allImages: true) || isCancelled()) return;
+      if (!mounted) return;
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final progress = ValueNotifier<(int, int)>((0, 0));
+      final dialog = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('导出为 PDF'),
+          content: ValueListenableBuilder<(int, int)>(
+            valueListenable: progress,
+            builder: (_, value, _) {
+              final (completed, total) = value;
+              final ready = total > 0;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: ready ? completed / total : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    !ready
+                        ? '正在准备页面…'
+                        : completed == total
+                        ? '正在生成文件…'
+                        : '已处理 $completed / $total 页',
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                navigator.pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+      unawaited(navigator.push(dialog));
+      bool shouldStop() => isCancelled() || !dialog.isActive;
+      late final Uint8List? bytes;
+      try {
+        bytes = await _markdrawController.exportPdf(
+          isCancelled: shouldStop,
+          onProgress: (completed, total) => progress.value = (completed, total),
+        );
+        cancelled = shouldStop();
+      } finally {
+        if (navigator.mounted && dialog.isActive) navigator.removeRoute(dialog);
+        progress.dispose();
+      }
+      if (isCancelled()) return;
+      if (bytes == null) {
+        message('当前画布没有可导出的内容');
+      } else if (await _fileHandler.savePdf(bytes)) {
+        message(kIsWeb ? '已开始下载 PDF' : 'PDF 已保存');
+      }
+    } catch (error) {
+      debugPrint('[PdfExport] ${error.runtimeType}');
+      message('PDF 导出失败，请确认图片已加载后重试');
+    } finally {
+      _exportingPdf = false;
+    }
   }
 
   @override
@@ -2734,8 +3215,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           if (didPop) {
             return;
           }
-          if (_aiPanelEntry != null) {
-            _closeAiPanel();
+          if (_viewedAiSource != null) {
+            _returnToAiReply();
+            return;
+          }
+          if (_aiPanelExpanded) {
+            _collapseAiPanel();
+            return;
+          }
+          if (_referenceNote != null) {
+            setState(() => _referenceNote = null);
             return;
           }
           if (widget.temporaryCollaboration) {
@@ -2750,194 +3239,258 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             bottom: false,
             child: Stack(
               children: [
-                MarkdrawEditor(
-                  controller: _markdrawController,
-                  collaborationFocusLabel: focusStatus?.label,
-                  collaborationFocusDescription: focusStatus?.description,
-                  onExitCollaborationFocus: _exitFocus,
-                  collaborationFollowLabel: following == null
-                      ? null
-                      : '正在跟随 ${following.username.isEmpty ? '协作者' : following.username}',
-                  onExitCollaborationFollow: _stopFollowing,
-                  attributionActionResolver: _attributionFor,
-                  focusedCreatorKey: _focusTarget is CreatorFocus
-                      ? (_focusTarget as CreatorFocus).creatorKey
-                      : null,
-                  focusHistoricalContent: _focusTarget is HistoricalFocus,
-                  socketIdCreatorKeys: Map.unmodifiable(_socketCreatorKeys),
-                  presenceCreatorRevision: _presenceCreatorRevision,
-                  speechRecognitionService: _speechRecognitionService,
-                  speechRecognitionEnabled: !_aiSpeechInputActive,
-                  config: const MarkdrawEditorConfig(),
-                  canvasThemeBackground: effectivePreset.canvasBackground,
-                  useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
-                  currentThemeMode: themePreset.themeMode,
-                  onThemeModeChanged: _changeThemeMode,
-                  fingerDrawingEnabled:
-                      editorPreferences?.fingerDrawingEnabled ?? false,
-                  onFingerDrawingEnabledChanged: (value) {
-                    unawaited(
-                      ref
-                          .read(editorPreferencesProvider.notifier)
-                          .setFingerDrawingEnabled(value),
-                    );
-                  },
-                  saveStatusLabel: _saveStatusLabel(state.saveStatus),
-                  collaborating: state.collaborating,
-                  collaborationConnecting:
-                      state.collaborationStatus ==
-                      WhiteboardCollaborationStatus.connecting,
-                  collaborationError: state.collaborationError,
-                  collaborationStatusLabel: _collaborationStatusLabel(state),
-                  roomLink: state.roomLink,
-                  roomValue: state.roomValue,
-                  shareOriginConfigured: state.shareOriginConfigured,
-                  collaboratorCount: participants.isEmpty
-                      ? state.collaborators.length
-                      : participants.length,
-                  collaboratorsListenable: _remoteCollaborators,
-                  collaborationParticipants: participants,
-                  collaborationViewNotice: _buildCollaborationViewNotice(state),
-                  isCollaborationOwner: state.isRoomOwner,
-                  onSave: () {
-                    unawaited(_flushLocalDraftInBackground());
-                  },
-                  onSaveAs: () {
-                    unawaited(_fileHandler.saveAs());
-                  },
-                  onOpen: widget.temporaryCollaboration
-                      ? null
-                      : () {
-                          unawaited(_openExternalSceneAsLocalNote());
-                        },
-                  onExportPng: () {
-                    unawaited(_fileHandler.exportPng());
-                  },
-                  onShare: () {
-                    unawaited(_shareCurrentWhiteboard());
-                  },
-                  onExportSvg: () {
-                    unawaited(_fileHandler.exportSvg());
-                  },
-                  onExportSmartMarkdown: () {
-                    unawaited(
-                      _fileHandler.exportSmartLayout(
-                        SmartLayoutExportFormat.markdown,
-                      ),
-                    );
-                  },
-                  onExportSmartLatex: () {
-                    unawaited(
-                      _fileHandler.exportSmartLayout(
-                        SmartLayoutExportFormat.latex,
-                      ),
-                    );
-                  },
-                  onImportImage: () {
-                    unawaited(_fileHandler.importImage(context));
-                  },
-                  onEyedropperPressed: _onEyedropperPressed,
-                  onImportLibrary: () {
-                    unawaited(_fileHandler.importLibrary());
-                  },
-                  onExportLibrary: () {
-                    unawaited(_fileHandler.exportLibrary());
-                  },
-                  onBack: widget.temporaryCollaboration
-                      ? () {
-                          unawaited(_leaveCollaboration());
-                        }
-                      : () {
-                          unawaited(_handleBack());
-                        },
-                  onStartCollaboration: _startCollaboration,
-                  onJoinCollaboration: _promptJoinCollaboration,
-                  onLeaveCollaboration: _leaveCollaboration,
-                  onEndCollaboration: _endCollaboration,
-                  onManageCollaboration: _manageCollaborationMembers,
-                  onShareCollaboration: () async {
-                    final room = ref
-                        .read(whiteboardViewModelProvider)
-                        .activeRoom;
-                    if (room != null) await _showCollaborationInvitation(room);
-                  },
-                  onCheckCollaboration: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await _collaborationRepository.checkSynchronization();
-                    if (mounted) {
-                      messenger.showSnackBar(
-                        const SnackBar(content: Text('已发起同步校验')),
-                      );
-                    }
-                  },
-                  socialAction: SocialMessagesAction(
-                    prepareToOpenInvitation: _prepareToOpenFriendInvitation,
-                  ),
-                  onPointerPresence: _broadcastPointerPresence,
-                  onCanvasInteraction: _stopFollowing,
-                  onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
-                  pageNavigationEnabled:
-                      !_loadingScene &&
-                      _openingMessage == null &&
-                      _openError == null &&
-                      !_aiCaptureModeActive &&
-                      !_smartLayoutV3PanelVisible,
-                  onDocumentRenamed: () {
-                    unawaited(_renameAndSaveDocument());
-                  },
-                  onRecognizeInk: (request) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .recognize(request),
-                  onAiPressed: _toggleAiAgent,
-                  onSmartLayoutPressed: _openSmartLayoutV3Panel,
-                  onLiveFreedrawChanged: state.collaborating
-                      ? _broadcastLiveFreedraw
-                      : null,
-                  shouldUseLiveInkV2: _shouldUseLiveInkV2,
-                  onLiveInkChanged: _broadcastLiveInk,
-                  onLiveInkCancelled: _cancelLiveInk,
-                  remoteWetInkStore: _remoteWetInkStore,
-                  onSceneChanged: (editorScene, SceneChangeSource source) {
-                    if (_loadingScene) {
-                      _previousEditorScene = editorScene;
-                      return;
-                    }
-                    switch (source) {
-                      case SceneChangeSource.undo:
-                      case SceneChangeSource.redo:
-                      case SceneChangeSource.reset:
-                        final previousEditorScene = _previousEditorScene;
-                        _previousEditorScene = editorScene;
-                        unawaited(
-                          _broadcastUndoRedoScene(
-                            previousEditorScene,
-                            _collaborationAdapter.currentScene(),
+                NoteSplitWorkspace(
+                  reference: _referenceNote,
+                  loadScene: ref
+                      .read(whiteboardSceneRepositoryProvider)
+                      .loadScene,
+                  onReplace: _chooseReferenceNote,
+                  onClose: () => setState(() => _referenceNote = null),
+                  child: MarkdrawEditor(
+                    controller: _markdrawController,
+                    assistantPanel: _aiPanel,
+                    assistantPanelVisible:
+                        _aiPanelExpanded &&
+                        !_aiCaptureModeActive &&
+                        !_smartLayoutV3PanelVisible,
+                    assistantSourceAction: _viewedAiSource == null
+                        ? null
+                        : FilledButton.tonalIcon(
+                            onPressed: _returnToAiReply,
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('返回 AI 回复'),
                           ),
+                    collaborationFocusLabel: focusStatus?.label,
+                    collaborationFocusDescription: focusStatus?.description,
+                    onExitCollaborationFocus: _exitFocus,
+                    collaborationFollowLabel: following == null
+                        ? null
+                        : '正在跟随 ${following.username.isEmpty ? '协作者' : following.username}',
+                    onExitCollaborationFollow: _stopFollowing,
+                    attributionActionResolver: _attributionFor,
+                    focusedCreatorKey: _focusTarget is CreatorFocus
+                        ? (_focusTarget as CreatorFocus).creatorKey
+                        : null,
+                    focusHistoricalContent: _focusTarget is HistoricalFocus,
+                    socketIdCreatorKeys: Map.unmodifiable(_socketCreatorKeys),
+                    presenceCreatorRevision: _presenceCreatorRevision,
+                    speechRecognitionService: _speechRecognitionService,
+                    speechRecognitionEnabled: !_aiSpeechInputActive,
+                    config: const MarkdrawEditorConfig(),
+                    canvasThemeBackground: effectivePreset.canvasBackground,
+                    useFlatBackgrounds:
+                        effectivePreset.usesMonochromeBackground,
+                    currentThemeMode: themePreset.themeMode,
+                    onThemeModeChanged: _changeThemeMode,
+                    fingerDrawingEnabled:
+                        editorPreferences?.fingerDrawingEnabled ?? false,
+                    onFingerDrawingEnabledChanged: (value) {
+                      unawaited(
+                        ref
+                            .read(editorPreferencesProvider.notifier)
+                            .setFingerDrawingEnabled(value),
+                      );
+                    },
+                    saveStatusLabel: _saveStatusLabel(state.saveStatus),
+                    collaborating: state.collaborating,
+                    collaborationConnecting:
+                        state.collaborationStatus ==
+                        WhiteboardCollaborationStatus.connecting,
+                    collaborationError: state.collaborationError,
+                    collaborationStatusLabel: _collaborationStatusLabel(state),
+                    roomLink: state.roomLink,
+                    roomValue: state.roomValue,
+                    shareOriginConfigured: state.shareOriginConfigured,
+                    collaboratorCount: participants.isEmpty
+                        ? state.collaborators.length
+                        : participants.length,
+                    collaboratorsListenable: _remoteCollaborators,
+                    collaborationParticipants: participants,
+                    collaborationViewNotice: _buildCollaborationViewNotice(
+                      state,
+                    ),
+                    isCollaborationOwner: state.isRoomOwner,
+                    onSave: () {
+                      unawaited(_flushLocalDraftInBackground());
+                    },
+                    onSaveAs: () {
+                      unawaited(_saveDrawingAs());
+                    },
+                    onOpen: widget.temporaryCollaboration
+                        ? null
+                        : () {
+                            unawaited(_openExternalSceneAsLocalNote());
+                          },
+                    onOpenBeside: widget.temporaryCollaboration
+                        ? null
+                        : _chooseReferenceNote,
+                    openBesideDisabledReason:
+                        _splitBlockedByCollaboration(state)
+                        ? '并排打开（请先退出协作）'
+                        : null,
+                    onExportPng: () {
+                      unawaited(_exportWithRoomImages(_fileHandler.exportPng));
+                    },
+                    onShare: () {
+                      unawaited(_shareCurrentWhiteboard());
+                    },
+                    onExportSvg: () {
+                      unawaited(_exportWithRoomImages(_fileHandler.exportSvg));
+                    },
+                    onExportPdf: () => unawaited(_exportPdf()),
+                    onExportSmartMarkdown: () {
+                      unawaited(
+                        _fileHandler.exportSmartLayout(
+                          SmartLayoutExportFormat.markdown,
+                        ),
+                      );
+                    },
+                    onExportSmartLatex: () {
+                      unawaited(
+                        _fileHandler.exportSmartLayout(
+                          SmartLayoutExportFormat.latex,
+                        ),
+                      );
+                    },
+                    onImportImage: () {
+                      unawaited(_fileHandler.importImage(context));
+                    },
+                    onEyedropperPressed: _onEyedropperPressed,
+                    onImportLibrary: () {
+                      unawaited(_fileHandler.importLibrary());
+                    },
+                    onExportLibrary: () {
+                      unawaited(_fileHandler.exportLibrary());
+                    },
+                    onBack: _referenceNote != null
+                        ? () => setState(() => _referenceNote = null)
+                        : widget.temporaryCollaboration
+                        ? () {
+                            unawaited(_leaveCollaboration());
+                          }
+                        : () {
+                            unawaited(_handleBack());
+                          },
+                    onStartCollaboration: _startCollaboration,
+                    onJoinCollaboration: _promptJoinCollaboration,
+                    onLeaveCollaboration: _leaveCollaboration,
+                    onEndCollaboration: _endCollaboration,
+                    onManageCollaboration: _manageCollaborationMembers,
+                    onShareCollaboration: () async {
+                      final room = ref
+                          .read(whiteboardViewModelProvider)
+                          .activeRoom;
+                      if (room != null) {
+                        await _showCollaborationInvitation(room);
+                      }
+                    },
+                    onCheckCollaboration: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await _collaborationRepository.checkSynchronization();
+                      if (mounted) {
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('已发起同步校验')),
                         );
-                        _scheduleLocalDraft();
-                        break;
-                      case SceneChangeSource.remoteApply:
-                        _scheduleLocalDraft();
+                      }
+                    },
+                    socialAction: SocialMessagesAction(
+                      prepareToOpenInvitation: _prepareToOpenFriendInvitation,
+                    ),
+                    onPointerPresence: _broadcastPointerPresence,
+                    onCanvasInteraction: _stopFollowing,
+                    onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
+                    pageNavigationEnabled:
+                        !_loadingScene &&
+                        _openingMessage == null &&
+                        _openError == null &&
+                        !_aiCaptureModeActive &&
+                        !_smartLayoutV3PanelVisible,
+                    canvasOverlayBuilder: _aiCaptureModeActive
+                        ? (viewport) => RegionCaptureOverlay(
+                            onCommit: (rect) =>
+                                _handleRegionSelected(viewport, rect),
+                            onCancel: _handleRegionCancel,
+                          )
+                        : _viewedAiSource == null
+                        ? null
+                        : _buildAiSourceHighlight,
+                    onDocumentRenamed: () {
+                      unawaited(_renameAndSaveDocument());
+                    },
+                    onRecognizeInk: (request) => ref
+                        .read(inkRecognitionRepositoryProvider)
+                        .recognize(request),
+                    onAiPressed: _toggleAiAgent,
+                    selectionActions: {
+                      '解释这段': () => _openAiAgent(
+                        AiAgentScope.selection,
+                        instruction: '解释这段内容',
+                      ),
+                      '整理为笔记': () => _openAiAgent(
+                        AiAgentScope.selection,
+                        instruction: '把这段内容整理为笔记，保留要点和推导步骤，看不清的地方标为待确认',
+                      ),
+                    },
+                    onAskCurrentPage: () => _openAiAgent(
+                      AiAgentScope.page,
+                      instruction: '解释这一页的内容与批注',
+                    ),
+                    onSmartLayoutPressed: _openSmartLayoutV3Panel,
+                    onLiveFreedrawChanged: state.collaborating
+                        ? _broadcastLiveFreedraw
+                        : null,
+                    shouldUseLiveInkV2: _shouldUseLiveInkV2,
+                    onLiveInkChanged: _broadcastLiveInk,
+                    onLiveInkCancelled: _cancelLiveInk,
+                    remoteWetInkStore: _remoteWetInkStore,
+                    onSceneChanged: (editorScene, SceneChangeSource source) {
+                      if (_loadingScene) {
                         _previousEditorScene = editorScene;
-                        break;
-                      case SceneChangeSource.userEdit:
-                      case SceneChangeSource.restore:
-                        final changedElements =
-                            _markdrawController.lastChangedElements;
-                        if (changedElements == null) {
-                          unawaited(_saveMarkdrawScene());
-                        } else {
-                          unawaited(_broadcastChangedElements(changedElements));
+                        return;
+                      }
+                      switch (source) {
+                        case SceneChangeSource.undo:
+                        case SceneChangeSource.redo:
+                        case SceneChangeSource.reset:
+                          final previousEditorScene = _previousEditorScene;
+                          _previousEditorScene = editorScene;
+                          unawaited(
+                            _broadcastUndoRedoScene(
+                              previousEditorScene,
+                              _collaborationAdapter.currentScene(),
+                            ),
+                          );
                           _scheduleLocalDraft();
-                        }
-                        _previousEditorScene = editorScene;
-                    }
-                  },
+                          break;
+                        case SceneChangeSource.remoteApply:
+                          _scheduleLocalDraft();
+                          _previousEditorScene = editorScene;
+                          break;
+                        case SceneChangeSource.userEdit:
+                        case SceneChangeSource.restore:
+                          final changedElements =
+                              _markdrawController.lastChangedElements;
+                          if (changedElements == null) {
+                            unawaited(_saveMarkdrawScene());
+                          } else {
+                            unawaited(
+                              _broadcastChangedElements(changedElements),
+                            );
+                            _scheduleLocalDraft();
+                          }
+                          _previousEditorScene = editorScene;
+                      }
+                    },
+                  ),
                 ),
-                if (_aiCaptureModeActive)
-                  RegionCaptureOverlay(
-                    onCommit: _handleRegionSelected,
-                    onCancel: _handleRegionCancel,
+                if (_preparingRoomImages)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      semanticsLabel: '正在补齐 PDF 底图',
+                    ),
                   ),
                 if (_openingMessage != null || _openError != null)
                   Positioned.fill(
@@ -3049,10 +3602,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void _onControllerNotifyForCollaboration() {
     if (!_canMutateWhiteboard) return;
     final editor = _markdrawController.editorState;
+    final canvasSize = _markdrawController.canvasSize;
+    if (canvasSize != _lastRoomImageCanvasSize) {
+      _lastRoomImageCanvasSize = canvasSize;
+      _scheduleLoadImageFiles();
+    }
     if (editor.viewport != _lastCollaborationViewport) {
       _lastCollaborationViewport = editor.viewport;
       if (!_applyingFollowViewport) _stopFollowing();
       _broadcastVisibleSceneBounds(_markdrawController.canvasSize);
+      _scheduleLoadImageFiles();
     }
     if (!identical(editor.selectedIds, _lastPresenceSelection) ||
         _markdrawController.editingTextElementId != _lastPresenceText) {
@@ -3865,40 +4424,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       }
     }
     return null;
-  }
-
-  CanvasLayout _layoutForNote(NoteItem? note) {
-    final template = _templateForNote(note?.pageTemplate);
-    return CanvasLayout(
-      type: note?.noteType == NoteType.unbounded
-          ? CanvasLayoutType.unbounded
-          : CanvasLayoutType.paged,
-      template: template,
-      pageFlow: _pageFlowForNote(note?.pageFlow),
-    );
-  }
-
-  CanvasPageTemplate _templateForNote(PageTemplate? template) {
-    return switch (template) {
-      PageTemplate.narrowLine => CanvasPageTemplate.narrowLine,
-      PageTemplate.wideLine => CanvasPageTemplate.wideLine,
-      PageTemplate.grid => CanvasPageTemplate.grid,
-      PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
-      PageTemplate.tianGrid => CanvasPageTemplate.tianGrid,
-      PageTemplate.miGrid => CanvasPageTemplate.miGrid,
-      PageTemplate.narrowVerticalLine => CanvasPageTemplate.narrowVerticalLine,
-      PageTemplate.wideVerticalLine => CanvasPageTemplate.wideVerticalLine,
-      PageTemplate.fourLineGrid => CanvasPageTemplate.fourLineGrid,
-      PageTemplate.ancientBook => CanvasPageTemplate.ancientBook,
-      PageTemplate.blank || null => CanvasPageTemplate.blank,
-    };
-  }
-
-  CanvasPageFlow _pageFlowForNote(PageFlow? pageFlow) {
-    return switch (pageFlow) {
-      PageFlow.rightToLeft => CanvasPageFlow.rightToLeft,
-      PageFlow.topToBottom || null => CanvasPageFlow.topToBottom,
-    };
   }
 }
 

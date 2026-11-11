@@ -54,7 +54,14 @@ PagedViewportMetrics? computePagedViewportMetrics({
         pages,
         clampedY + visibleHeight / 2,
       );
-      final centeredX = currentPage.bounds.center.dx - visibleWidth / 2;
+      final clampedX = visibleWidth >= currentPage.bounds.width
+          ? currentPage.bounds.center.dx - visibleWidth / 2
+          : viewport.offset.dx
+                .clamp(
+                  currentPage.bounds.left,
+                  currentPage.bounds.right - visibleWidth,
+                )
+                .toDouble();
       final scrollRange = math.max(0.0, maxY - minY);
       progress = scrollRange == 0
           ? 0.0
@@ -63,7 +70,7 @@ PagedViewportMetrics? computePagedViewportMetrics({
       atEnd = (clampedY - maxY).abs() < 0.5;
       maxScrollOffsetY = maxY;
       nextViewport = ViewportState(
-        offset: Offset(centeredX, clampedY),
+        offset: Offset(clampedX, clampedY),
         zoom: viewport.zoom,
       );
     case CanvasPageFlow.rightToLeft:
@@ -76,7 +83,14 @@ PagedViewportMetrics? computePagedViewportMetrics({
         pages,
         clampedX + visibleWidth / 2,
       );
-      final centeredY = currentPage.bounds.center.dy - visibleHeight / 2;
+      final clampedY = visibleHeight >= currentPage.bounds.height
+          ? currentPage.bounds.center.dy - visibleHeight / 2
+          : viewport.offset.dy
+                .clamp(
+                  currentPage.bounds.top,
+                  currentPage.bounds.bottom - visibleHeight,
+                )
+                .toDouble();
       final scrollRange = math.max(0.0, startX - endX);
       progress = scrollRange == 0
           ? 0.0
@@ -84,7 +98,7 @@ PagedViewportMetrics? computePagedViewportMetrics({
       atStart = (clampedX - startX).abs() < 0.5;
       atEnd = (clampedX - endX).abs() < 0.5;
       nextViewport = ViewportState(
-        offset: Offset(clampedX, centeredY),
+        offset: Offset(clampedX, clampedY),
         zoom: viewport.zoom,
       );
   }

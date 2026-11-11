@@ -232,7 +232,9 @@ class FlowPlacer {
             rect: LayoutRect(
               left: column.left,
               top: column.top + cursor.y,
-              width: result.width.clamp(0, column.width),
+              width: block.text == null
+                  ? result.width.clamp(0, column.width)
+                  : result.paintWidth,
               height: result.height,
             ),
             columnIndex: cursor.columnIndex,

@@ -7,7 +7,38 @@ import '../utils/app_haptics.dart';
 import 'app_motion.dart';
 
 /// 面板从锚点哪一侧展开，决定进入动画的生长方向。
-enum AnchoredPanelGrowth { down, right, left }
+enum AnchoredPanelGrowth { down, up, right, left }
+
+PopupMenuItem<T> anchoredActionMenuItem<T>(
+  BuildContext context, {
+  required T value,
+  required IconData icon,
+  required String label,
+}) {
+  final theme = Theme.of(context);
+  return PopupMenuItem<T>(
+    value: value,
+    height: 52,
+    child: SizedBox(
+      width: 192,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
+    ),
+  );
+}
 
 /// 统一锚点弹出面板路由：纸面容器 + 从锚点侧展开的方向性动画。
 ///
@@ -138,6 +169,7 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
     }
     final alignment = switch (growth) {
       AnchoredPanelGrowth.down => Alignment.topCenter,
+      AnchoredPanelGrowth.up => Alignment.bottomCenter,
       AnchoredPanelGrowth.right => Alignment.centerLeft,
       AnchoredPanelGrowth.left => Alignment.centerRight,
     };
@@ -205,10 +237,16 @@ class _AnchoredPanelLayoutDelegate extends SingleChildLayoutDelegate {
         insets.left,
         math.max(insets.left, size.width - insets.right - childSize.width),
       ),
-      position.top.clamp(
-        insets.top,
-        math.max(insets.top, size.height - insets.bottom - childSize.height),
-      ),
+      (growth == AnchoredPanelGrowth.up
+              ? position.top - childSize.height
+              : position.top)
+          .clamp(
+            insets.top,
+            math.max(
+              insets.top,
+              size.height - insets.bottom - childSize.height,
+            ),
+          ),
     );
   }
 

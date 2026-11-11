@@ -1,6 +1,8 @@
 // Uint8List/ByteData 经 package:flutter/foundation.dart 重导出提供。
 import 'package:flutter/foundation.dart';
 
+import 'ai_source_location.dart';
+
 const int maxAiVisualAttachments = 3;
 const int maxAiVisualAttachmentBytes = 4 * 1024 * 1024;
 const int maxAiVisualAttachmentLongestSide = 1568;
@@ -19,14 +21,17 @@ class AiVisualAttachment {
     required this.mimeType,
     required this.bytes,
     required this.kind,
+    this.location,
   });
 
   final String sourceLabel;
   final String mimeType;
   final Uint8List bytes;
   final AiVisualAttachmentKind kind;
+  final AiSourceLocation? location;
 
-  String get sizeLabel => '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} KiB';
+  String get sizeLabel =>
+      '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} KiB';
 }
 
 /// 发送前的附件校验单点。定稿校验顺序（勿再调整）：
@@ -74,6 +79,26 @@ bool _hasPngSignature(Uint8List bytes) {
     if (bytes[i] != _pngSignature[i]) return false;
   }
   return true;
+}
+
+/// Reads IHDR without asking the renderer to decode the image.
+(int, int)? readAiPngDimensions(Uint8List bytes) {
+  // Signature (8) + IHDR length/type/data/CRC (25).
+  if (bytes.length < 33 || !_hasPngSignature(bytes)) return null;
+  final header = ByteData.sublistView(bytes);
+  if (header.getUint32(8) != 13 || header.getUint32(12) != 0x49484452) {
+    return null;
+  }
+  final width = header.getUint32(16);
+  final height = header.getUint32(20);
+  if (width == 0 ||
+      height == 0 ||
+      width > 0x7fffffff ||
+      height > 0x7fffffff ||
+      !_isPngChunkStructureClean(bytes)) {
+    return null;
+  }
+  return (width, height);
 }
 
 /// PNG 纯净性校验：按 chunk 结构解析（8 字节签名后循环「4B 长度 + 4B 类型 +

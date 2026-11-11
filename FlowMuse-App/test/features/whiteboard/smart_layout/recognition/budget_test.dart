@@ -5,7 +5,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 void main() {
   test('默认值与 §6.2 表逐项一致', () {
     const budget = RecognitionBudget();
-    expect(budget.overviewMaxEdgePx, 2048);
+    expect(budget.overviewMaxEdgePx, 1024);
     expect(budget.regionTargetLineHeightMinPx, 48);
     expect(budget.regionTargetLineHeightMaxPx, 96);
     expect(budget.regionMaxEdgePx, 2048);

@@ -1,5 +1,7 @@
 import '../../core/elements/elements.dart';
 import '../../core/scene/scene_exports.dart';
+import '../mindmap/mindmap_layout.dart';
+import '../mindmap/mindmap_utils.dart';
 import '../tool_result.dart';
 
 /// Types that can contain bound text.
@@ -30,12 +32,14 @@ class BoundTextUtils {
     for (final parent in movedElements) {
       final boundText = scene.findBoundText(parent.id);
       if (boundText == null) continue;
-      final updated = boundText.copyWith(
-        x: parent.x,
-        y: parent.y,
-        width: parent.width,
-        height: parent.height,
-      );
+      final updated = MindmapUtils.isMindmapNode(parent)
+          ? MindmapLayout.positionLabel(boundText, parent)
+          : boundText.copyWith(
+              x: parent.x,
+              y: parent.y,
+              width: parent.width,
+              height: parent.height,
+            );
       results.add(UpdateElementResult(updated));
     }
     return results;

@@ -1,3 +1,5 @@
+import 'package:flow_muse/features/guide/view_models/guide_welcome_view_model.dart';
+import 'support/test_local_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,9 @@ import 'support/test_library_index_notifier.dart';
 Widget _testApp({AppThemePreset? initialPreset}) {
   return ProviderScope(
     overrides: [
+      guideSettingsRepositoryProvider.overrideWithValue(
+        TestLocalSettingsRepository(),
+      ),
       libraryIndexProvider.overrideWith(TestLibraryIndexNotifier.new),
       initialThemePresetProvider.overrideWithValue(
         initialPreset ?? defaultThemePreset,

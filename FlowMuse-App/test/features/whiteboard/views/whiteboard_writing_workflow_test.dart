@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -8,6 +9,9 @@ import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/views/region_capture_overlay.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
@@ -15,6 +19,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_file_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
@@ -22,6 +27,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/whiteboard_
 import 'package:flow_muse/features/whiteboard/collaboration/widgets/room_invite_qr.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
+import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
 import 'package:flow_muse/features/whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import 'package:flow_muse/features/whiteboard/pdf_note_import/pending_pdf_import_provider.dart';
@@ -80,6 +86,537 @@ void main() {
       EditorPreferencesViewModel.settingsKey,
       '{}',
     );
+  });
+
+  testWidgets('本地双开保留参考视图和主画布，并拦截协作入口', (tester) async {
+    final (main, reference) = (await tester.runAsync(() async {
+      final main = await library.createNote(title: '双开主笔记');
+      final reference = await library.createNote(title: '双开测试资料');
+      return (main, reference);
+    }))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, main);
+    final editor = find.byType(MarkdrawEditor);
+
+    Future<void> openReference() async {
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('并排打开'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '双开测试资料');
+      await tester.pumpAndSettle();
+      expect(find.text(main.title), findsOneWidget);
+      await tester.tap(find.widgetWithText(ListTile, reference.title));
+      await tester.pump();
+      await _drainIo(
+        tester,
+        container,
+        until: () => find.byType(EditorCanvas).evaluate().length == 2,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    MarkdrawController referenceController() => tester
+        .widgetList<EditorCanvas>(find.byType(EditorCanvas))
+        .singleWhere((canvas) => canvas.controller != controller)
+        .controller;
+
+    await openReference();
+    expect(referenceController().viewMode, isTrue);
+    final referenceCanvas = find.byWidgetPredicate(
+      (widget) => widget is EditorCanvas && widget.controller != controller,
+    );
+    final referenceRect = tester.getRect(referenceCanvas);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    expect(find.text('AI笔记助手'), findsOneWidget);
+    expect(tester.getRect(referenceCanvas), referenceRect);
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('editor-assistant-panel')))
+          .overlaps(referenceRect),
+      isFalse,
+    );
+    await tester.tap(find.byTooltip('收起AI笔记助手'));
+    await tester.pumpAndSettle();
+    final mainX = tester.getCenter(editor).dx;
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('交换左右'));
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(editor).dx, lessThan(mainX));
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更换参考笔记'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    referenceController().setViewport(
+      const ViewportState(zoom: 1.75, offset: Offset(20, 30)),
+    );
+    expect(controller.editorState.viewport.zoom, isNot(1.75));
+    await tester.widget<MarkdrawEditor>(editor).onStartCollaboration!();
+    await tester.widget<MarkdrawEditor>(editor).onJoinCollaboration!();
+    await tester.pumpAndSettle();
+    expect(find.text('请先关闭参考笔记，再开启实时协作'), findsOneWidget);
+    expect(container.read(whiteboardViewModelProvider).activeRoom, isNull);
+
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    await tester.pumpAndSettle();
+    expect(find.text('参考笔记'), findsOneWidget);
+    await tester.tap(find.text('主笔记'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<MarkdrawEditor>(editor).controller, same(controller));
+    await tester.tap(find.text('参考笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    expect(find.text('更换参考笔记'), findsOneWidget);
+    expect(find.text('交换左右'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭参考笔记'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<MarkdrawEditor>(editor).controller, same(controller));
+
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    await tester.pumpAndSettle();
+    await openReference();
+    expect(referenceController().editorState.viewport.zoom, 1.75);
+  });
+
+  testWidgets('白板内的 AI 来源菜单显示在助手上层并可选取', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-source-menu'),
+    ))!;
+    await _open(tester, _container(library: library), note);
+
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
+    await tester.pumpAndSettle();
+    final source = find.byTooltip('选择来源');
+    final sourceOrigin = tester.getTopLeft(source);
+    await tester.tap(source);
+    await tester.pumpAndSettle();
+
+    final noteSource = find.text('整篇笔记（仅文字）').hitTestable();
+    expect(noteSource, findsOneWidget);
+    expect(find.text('选区截图'), findsNothing);
+    final item = tester.getBottomLeft(noteSource);
+    expect(item.dy, lessThan(sourceOrigin.dy));
+    expect(item.dx, greaterThan(sourceOrigin.dx));
+    await tester.tap(noteSource);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('移除笔记来源'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('助手锁定新选区的文字，保留草稿与已发送消息', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-auto-selection'),
+    ))!;
+    final requests = <Object?>[];
+    final firstReply = Completer<NativeHttpResponse>();
+    const reply = NativeHttpResponse(
+      statusCode: 200,
+      body: '{"choices":[{"message":{"content":"测试回复"}}]}',
+    );
+    final controller = await _open(
+      tester,
+      _container(
+        library: library,
+        assistant: AiAgentRepository(
+          config: const AiAgentConfig(
+            baseUrl: 'https://example.com/v1',
+            apiKey: 'test-key',
+            model: 'test-model',
+          ),
+          post:
+              ({
+                required url,
+                headers = const {},
+                required body,
+                connectTimeoutMs = 8000,
+                readTimeoutMs = 130000,
+                cancelToken,
+              }) async {
+                final messages = (jsonDecode(body) as Map)['messages'] as List;
+                requests.add((messages.last as Map)['content']);
+                return requests.length == 1 ? firstReply.future : reply;
+              },
+        ),
+      ),
+      note,
+    );
+    const first = ElementId('first-text');
+    const second = ElementId('second-text');
+    const shape = ElementId('other-shape');
+    controller.setLayout(const CanvasLayout(type: CanvasLayoutType.unbounded));
+    controller.loadScene(
+      Scene().upsertRemoteElements([
+        TextElement(
+          id: first,
+          x: 180,
+          y: 180,
+          width: 120,
+          height: 40,
+          text: '第一段样例',
+          fontFamily: 'Excalifont',
+        ),
+        TextElement(
+          id: second,
+          x: 180,
+          y: 320,
+          width: 120,
+          height: 40,
+          text: '第二段样例',
+          fontFamily: 'Excalifont',
+        ),
+        RectangleElement(id: shape, x: 330, y: 180, width: 50, height: 40),
+      ]),
+    );
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    final chip = find.widgetWithText(InputChip, '当前文字选区');
+    final composer = find.byType(TextField);
+    expect(chip, findsNothing);
+    await tester.enterText(composer, '请解释');
+    controller.applyResult(SetSelectionResult({first, shape}));
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(requests, isEmpty);
+    controller.applyResult(SetSelectionResult({shape}));
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(tester.widget<TextField>(composer).controller!.text, '请解释');
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pump();
+    expect(requests.single, isA<String>());
+    expect(requests.single, contains('第一段样例'));
+    expect(requests.single, isNot(contains('第二段样例')));
+
+    controller.applyResult(SetSelectionResult({second}));
+    controller.applyResult(SetSelectionResult({}));
+    firstReply.complete(reply);
+    await tester.pumpAndSettle();
+    expect(chip, findsOneWidget);
+    expect(find.text('测试回复', findRichText: true), findsOneWidget);
+    await tester.enterText(composer, '继续解释');
+    await tester.pump();
+    await tester.tap(find.byTooltip('追问修改'));
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(2));
+    expect(requests.last, contains('第二段样例'));
+    expect(requests.last, isNot(contains('第一段样例')));
+    await tester.tap(find.byTooltip('移除笔记来源'));
+    await tester.pumpAndSettle();
+    controller.setViewport(const ViewportState(zoom: 1.1));
+    await tester.pumpAndSettle();
+    expect(chip, findsNothing);
+    await tester.tap(find.byTooltip('收起AI笔记助手'));
+    controller.applyResult(SetSelectionResult({first}));
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    expect(chip, findsNothing);
+  });
+
+  testWidgets('从 AI 回复点击引用可定位原文并返回同一回复', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-source-return'),
+    ))!;
+    final container = _container(
+      library: library,
+      assistant: AiAgentRepository(
+        config: const AiAgentConfig(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'test-model',
+        ),
+        post:
+            ({
+              required url,
+              headers = const {},
+              required body,
+              connectTimeoutMs = 8000,
+              readTimeoutMs = 130000,
+              cancelToken,
+            }) async => const NativeHttpResponse(
+              statusCode: 200,
+              body:
+                  '{"choices":[{"message":{"content":"[原文 1](flowmuse-source:text-1)"}}]}',
+            ),
+      ),
+    );
+    final controller = await _open(tester, container, note);
+    const id = ElementId('cited-text');
+    const target = Offset(960, 460);
+    controller.setLayout(const CanvasLayout(type: CanvasLayoutType.unbounded));
+    controller.loadScene(
+      Scene().addElement(
+        TextElement(
+          id: id,
+          x: 900,
+          y: 440,
+          width: 120,
+          height: 40,
+          text: '原文示例',
+          fontFamily: 'Excalifont',
+        ),
+      ),
+    );
+    controller.applyResult(SetSelectionResult({id}));
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+    final citation = find.text('原文 1', findRichText: true);
+    await tester.ensureVisible(citation);
+    await tester.pumpAndSettle();
+    await tester.tap(citation);
+    await tester.pumpAndSettle();
+
+    expect(find.text('返回 AI 回复'), findsOneWidget);
+    expect(citation, findsOneWidget);
+    expect(
+      tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder,
+      isNotNull,
+    );
+    final center = controller.editorState.viewport
+        .visibleRect(controller.canvasSize)
+        .center;
+    expect((center - target).distance, lessThan(0.01));
+    expect(controller.currentScene.getElementById(id), isNotNull);
+    await tester.tap(find.text('返回 AI 回复'));
+    await tester.pumpAndSettle();
+    expect(citation, findsOneWidget);
+    expect(tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder, isNull);
+  });
+
+  testWidgets('笔记 Agent 确认后追加多页整理稿，一次撤销且保留原稿和会话', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: '多页整理测试', noteType: NoteType.paged),
+    ))!;
+    final draft = [
+      '# 讲义整理',
+      '## 核心概念',
+      ...List.generate(70, (index) => '- 推导步骤 ${index + 1}'),
+    ].join('\n');
+    final container = _container(
+      library: library,
+      assistant: AiAgentRepository(
+        config: const AiAgentConfig(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'test-model',
+        ),
+        readSearchToken: () async => 'mock-session',
+        post:
+            ({
+              required url,
+              headers = const {},
+              required body,
+              connectTimeoutMs = 8000,
+              readTimeoutMs = 130000,
+              cancelToken,
+            }) async {
+              if (url.endsWith('/api/assistant/web-search')) {
+                expect(jsonDecode(body), {'query': '讲义'});
+                return const NativeHttpResponse(
+                  statusCode: 200,
+                  body:
+                      '[{"title":"讲义补充","url":"https://example.test/lecture","snippet":"课程资料"}]',
+                );
+              }
+              final request = jsonDecode(body) as Map;
+              final tools = request['tools'] as List;
+              final canSearch = tools.any(
+                (tool) => tool['function']['name'] == 'web_search',
+              );
+              return NativeHttpResponse(
+                statusCode: 200,
+                body: jsonEncode({
+                  'choices': [
+                    {
+                      'message': {
+                        'content': canSearch ? null : '整理稿已生成',
+                        'tool_calls': [
+                          {
+                            'type': 'function',
+                            'function': {
+                              'name': canSearch ? 'web_search' : 'draft_note',
+                              'arguments': jsonEncode(
+                                canSearch ? {'query': '讲义'} : {'text': draft},
+                              ),
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                }),
+              );
+            },
+      ),
+    );
+    final controller = await _open(tester, container, note);
+    final original = controller.layout.pages.single;
+    const originalText = '保留这份原稿';
+    controller.loadScene(
+      controller.currentScene.addElement(
+        TextElement(
+          id: const ElementId('original-draft-source'),
+          x: original.bounds.left + 80,
+          y: original.bounds.top + 80,
+          width: 200,
+          height: 40,
+          text: originalText,
+          fontFamily: 'Excalifont',
+          customData: CanvasLayout.elementCustomData(original.id),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    final composer = find.byKey(const ValueKey('note-agent-composer'));
+    await tester.tap(find.byTooltip('开启联网搜索'));
+    await tester.pump();
+    await tester.enterText(composer, '找点讲义资料并整理为笔记');
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送'));
+    await tester.pumpAndSettle();
+    expect(find.text('整理稿预览'), findsOneWidget);
+    expect(controller.layout.pages.single.id, original.id);
+
+    final apply = find.text('确认写入整理稿');
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.length, greaterThan(2));
+    expect(controller.layout.pages.first.id, original.id);
+    expect(find.text('已写入笔记'), findsOneWidget);
+    expect(find.text('整理稿已生成'), findsOneWidget);
+    expect(
+      controller.currentScene.activeElements
+          .whereType<TextElement>()
+          .map((element) => element.text)
+          .join(' '),
+      contains('https://example.test/lecture'),
+    );
+    controller.undo();
+    await tester.pumpAndSettle();
+    expect(controller.layout.pages.single.id, original.id);
+    expect(
+      controller.currentScene.activeElements
+          .whereType<TextElement>()
+          .single
+          .text,
+      originalText,
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await _drainIo(tester, container);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
+  testWidgets('AI 框选与偏移缩放后的画布对齐，预览保留上下两端', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-region-bounds'),
+    ))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    const viewport = ViewportState(offset: Offset(170, 420), zoom: 1.5);
+    const region = Rect.fromLTWH(100, 80, 180, 150);
+    const marks = [(Offset(140, 95), '#ff0000'), (Offset(140, 208), '#0000ff')];
+    controller.loadScene(
+      Scene().upsertRemoteElements([
+        for (final (point, color) in marks)
+          RectangleElement(
+            id: ElementId(color),
+            x: viewport.screenToScenePrecise(point).dx - 8,
+            y: viewport.screenToScenePrecise(point).dy - 8,
+            width: 16,
+            height: 16,
+            fillStyle: FillStyle.solid,
+            backgroundColor: color,
+            strokeColor: color,
+            roughness: 0,
+          ),
+      ]),
+    );
+    controller.setViewport(viewport);
+    await tester.pump();
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
+    await tester.pumpAndSettle();
+    final screenshot = find.byTooltip('选区截图');
+    final shortcuts = find.byTooltip('收起快捷指令');
+    expect(tester.getCenter(screenshot).dy, tester.getCenter(shortcuts).dy);
+    expect(
+      tester.getRect(screenshot).left - tester.getRect(shortcuts).right,
+      inInclusiveRange(0, 12),
+    );
+    await tester.tap(screenshot);
+    await tester.pump();
+
+    final canvas = tester.getRect(find.byType(EditorCanvas));
+    final overlay = find.byType(RegionCaptureOverlay);
+    expect(canvas.top, greaterThan(0));
+    expect(tester.getRect(overlay), canvas);
+    await tester.runAsync(
+      () => tester.dragFrom(
+        canvas.topLeft + region.topLeft,
+        region.size.bottomRight(Offset.zero),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.byTooltip('查看截图').evaluate().isNotEmpty,
+    );
+
+    final thumbnail = find.byTooltip('查看截图');
+    await tester.ensureVisible(thumbnail);
+    await tester.pumpAndSettle();
+    await tester.tap(thumbnail);
+    await tester.pumpAndSettle();
+    final preview = find.descendant(
+      of: find.byType(InteractiveViewer),
+      matching: find.byType(Image),
+    );
+    final image = tester.widget<Image>(preview);
+    expect(image.fit, BoxFit.contain);
+    await tester.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(
+        (image.image as MemoryImage).bytes,
+      );
+      final frame = await codec.getNextFrame();
+      try {
+        final rgba = (await frame.image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final pixels = <int>[];
+        for (final (point, _) in marks) {
+          final x =
+              ((point.dx - region.left) / region.width * frame.image.width)
+                  .floor();
+          final y =
+              ((point.dy - region.top) / region.height * frame.image.height)
+                  .floor();
+          pixels.add(rgba.getUint32((y * frame.image.width + x) * 4));
+        }
+        expect(pixels, [0xff0000ff, 0x0000ffff]);
+      } finally {
+        frame.image.dispose();
+        codec.dispose();
+      }
+    });
+    await tester.tap(find.byTooltip('关闭截图预览'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('查看截图'), findsOneWidget);
   });
 
   testWidgets('笔身双击只切当前画布，弹窗、后台和离页不误触发', (tester) async {
@@ -1184,6 +1721,152 @@ void main() {
     });
   }
 
+  testWidgets('从已有多页 PDF 开房，首屏与跳页无需等待慢图', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final source = MarkdrawController();
+    addTearDown(source.dispose);
+    await tester.runAsync(() async {
+      final pages = <PdfRenderedPage>[];
+      for (var page = 1; page <= 4; page++) {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawColor(Color(0xff000000 + page), BlendMode.src);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(2, 2);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        picture.dispose();
+        pages.add(
+          PdfRenderedPage(
+            bytes: bytes!.buffer.asUint8List(),
+            mimeType: 'image/png',
+            width: 600,
+            height: 800,
+            pageNumber: page,
+          ),
+        );
+      }
+      await source.importPdfPages(
+        pages,
+        const Size(1200, 900),
+        asBackground: true,
+      );
+    });
+    final ids = source.currentScene.elements
+        .whereType<ImageElement>()
+        .map((image) => image.fileId)
+        .toList();
+    expect(ids.toSet(), hasLength(4));
+    final files = _DelayedPdfRoomFiles(ids[1], failOnceId: ids.last);
+    final store = _MemberJoinSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final host = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pdf-host'),
+      sceneStore: store,
+      fileStore: files,
+    );
+    final guest = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pdf-guest'),
+      sceneStore: store,
+      fileStore: files,
+    );
+    addTearDown(host.stop);
+    addTearDown(guest.stop);
+    final room = (await tester.runAsync(
+      () => host.startNewRoom(
+        initialScene: WhiteboardCollaborationAdapter(source).currentScene(),
+      ),
+    ))!;
+    final container = _container(library: library, collaboration: guest);
+    final before = (await tester.runAsync(
+      library.loadIndex,
+    ))!.notes.map((note) => note.id).toSet();
+    final router = GoRouter(
+      initialLocation: '/room',
+      routes: [
+        GoRoute(path: '/library', builder: (_, _) => const SizedBox.shrink()),
+        GoRoute(
+          path: '/room',
+          builder: (_, _) =>
+              WhiteboardPage.collaborationRoom(initialRoom: room),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    final controller = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .controller!;
+    await _drainIo(
+      tester,
+      container,
+      until: () => controller.currentScene.files.containsKey(ids.first),
+    );
+    expect(controller.layout.pages, hasLength(4));
+    expect(files.uploaded.keys, [ids.first]);
+    expect(controller.currentScene.files.keys, [ids.first]);
+
+    files.releaseUpload.complete();
+    await _drainIo(
+      tester,
+      container,
+      until: () => files.requested.contains(ids[1]),
+    );
+    expect(files.requested, isNot(contains(ids.last)));
+    controller.navigateToPage(controller.layout.pages.last.id, fit: true);
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.text('当前页面的图片加载失败').evaluate().isNotEmpty,
+    );
+    expect(
+      controller.currentScene.elements
+          .whereType<ImageElement>()
+          .singleWhere((image) => image.fileId == ids.last)
+          .status,
+      'saved',
+    );
+    await tester.tap(find.text('重试'));
+    await _drainIo(
+      tester,
+      container,
+      until: () => controller.currentScene.files.containsKey(ids.last),
+    );
+    expect(controller.currentScene.files, isNot(contains(ids[1])));
+    final leave = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onLeaveCollaboration!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存到本地'));
+    await tester.pump();
+    expect(
+      (await tester.runAsync(
+        library.loadIndex,
+      ))!.notes.map((note) => note.id).toSet(),
+      before,
+    );
+    files.releaseDownload.complete();
+    await _drainIo(
+      tester,
+      container,
+      until: () => router.routeInformationProvider.value.uri.path == '/library',
+    );
+    await leave;
+    final notes = (await tester.runAsync(library.loadIndex))!.notes;
+    final saved = notes.singleWhere((note) => !before.contains(note.id));
+    final content = (await tester.runAsync(() => scenes.loadScene(saved.id)))!;
+    expect(
+      ((jsonDecode(content) as Map)['files'] as Map).keys.toSet(),
+      ids.toSet(),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
   for (final (template, resetFirst) in [
     (CanvasPageTemplate.blank, false),
     (CanvasPageTemplate.grid, false),
@@ -2152,6 +2835,65 @@ class _MemberJoinSceneStore extends MemoryEncryptedSceneStore {
       );
 }
 
+class _DelayedPdfRoomFiles implements CollaborationFileStore {
+  _DelayedPdfRoomFiles(this.slowId, {required this.failOnceId});
+
+  final String slowId;
+  final String failOnceId;
+  final releaseUpload = Completer<void>();
+  final releaseDownload = Completer<void>();
+  final uploaded = <String, ImageFile>{};
+  final requested = <String>[];
+
+  @override
+  Future<CollaborationFileUploadResult> uploadFiles({
+    required String roomId,
+    required String roomKey,
+    required Map<String, Object?> filesJson,
+    required Iterable<String> fileIds,
+  }) async {
+    final saved = <String, Map<String, Object?>>{};
+    for (final id in fileIds) {
+      if (id == slowId) await releaseUpload.future;
+      final file = filesJson[id]! as Map<String, Object?>;
+      uploaded[id] = ImageFile(
+        mimeType: 'image/png',
+        bytes: base64Decode((file['dataURL']! as String).split(',').last),
+      );
+      saved[id] = file;
+    }
+    return CollaborationFileUploadResult(
+      savedFiles: saved,
+      erroredFiles: const {},
+    );
+  }
+
+  @override
+  Future<CollaborationFileLoadResult> loadFiles({
+    required String roomId,
+    required String roomKey,
+    required Iterable<String> fileIds,
+  }) async {
+    final loaded = <String, ImageFile>{};
+    final errors = <String>{};
+    for (final id in fileIds) {
+      final fail = id == failOnceId && !requested.contains(id);
+      requested.add(id);
+      if (id == slowId) await releaseDownload.future;
+      final file = uploaded[id];
+      if (file == null || fail) {
+        errors.add(id);
+      } else {
+        loaded[id] = file;
+      }
+    }
+    return CollaborationFileLoadResult(
+      loadedFiles: loaded,
+      erroredFileIds: errors,
+    );
+  }
+}
+
 class _TrackedCollaborationRepository extends CollaborationRepository {
   _TrackedCollaborationRepository({
     required super.transport,
@@ -2179,6 +2921,7 @@ ProviderContainer _container({
   InkRecognitionRepository? recognition,
   CollaborationRepository? collaboration,
   WhiteboardSceneRepository? sceneRepository,
+  AiAgentRepository? assistant,
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -2192,6 +2935,8 @@ ProviderContainer _container({
       ),
       if (recognition != null)
         inkRecognitionRepositoryProvider.overrideWithValue(recognition),
+      if (assistant != null)
+        aiAgentRepositoryProvider.overrideWithValue(assistant),
     ],
   );
   addTearDown(container.dispose);

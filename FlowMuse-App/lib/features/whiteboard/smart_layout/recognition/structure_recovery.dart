@@ -660,8 +660,6 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       return 'pageFigureTextUnderstanding';
     }
     if (textUnits.length > 1) {
-      // 只有明确的单列表（可带标题）保留零模型快路径；普通段落也需要
-      // 全文判断，不能因为几何无冲突就永远不给模型识别标题的机会。
       final simpleList =
           local.listGroups.length == 1 &&
           textUnits.every(
@@ -669,9 +667,50 @@ class StructureRecovery implements RecognitionStructureRecoverer {
                 local.roles[unit.unitId] == 'title' ||
                 local.listGroups.single.members.contains(unit.unitId),
           );
-      if (!simpleList) return 'pageTextUnderstanding';
+      if (!simpleList && !_isShortSingleColumn(units, local, policy)) {
+        return 'pageTextUnderstanding';
+      }
     }
     return null;
+  }
+
+  bool _isShortSingleColumn(
+    List<RecognitionUnitInput> units,
+    StructureResult local,
+    StructurePolicy policy,
+  ) {
+    // shortcut: 仅对少量无歧义短行复用本地结构，等真实笔记对照通过再扩大范围。
+    if (units.length > 3 || local.listGroups.isNotEmpty) return false;
+    final lineHeight = _medianLineHeight(units);
+    final indentTolerance = lineHeight * policy.indentToleranceLineHeights;
+    final anchor = units
+        .firstWhere((unit) => unit.unitId == local.readingOrder.first)
+        .bounds;
+    var previousBottom = anchor.top;
+    var length = 0;
+    for (final id in local.readingOrder) {
+      final unit = units.firstWhere((unit) => unit.unitId == id);
+      final bounds = unit.bounds;
+      final text = (unit.text ?? '').trim();
+      final gap = bounds.top - previousBottom;
+      length += text.runes.length;
+      if (!unit.isTextUnit ||
+          local.roles[id] != 'body' ||
+          _roleHintOfText(text) == RecognitionRoleHint.listItem ||
+          text.isEmpty ||
+          text.contains('\n') ||
+          text.contains('\r') ||
+          length > 48 ||
+          bounds.height <= 0 ||
+          !_horizontalOverlap(anchor, bounds) ||
+          (bounds.left - anchor.left).abs() > indentTolerance ||
+          gap < 0 ||
+          gap > lineHeight * 2) {
+        return false;
+      }
+      previousBottom = bounds.top + bounds.height;
+    }
+    return true;
   }
 
   bool _hasAmbiguousGroupMembership(

@@ -3,6 +3,29 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('整理稿保留标题与列表，并拒绝空稿和混合写入', () {
+    const text = '# 课堂笔记\n## 关键概念\n- 保留使用条件';
+    const draft = {
+      'tool': 'draft_note',
+      'arguments': {'text': text},
+    };
+    expect(AiAgentAction.fromJson(draft).toJson(), draft);
+    expect(
+      () => AiAgentAction.edited(tool: AiAgentTool.draftNote, value: '# 只有标题'),
+      throwsFormatException,
+    );
+    expect(
+      () => AiAgentResponse.fromJson({
+        'message': '草稿',
+        'actions': [
+          draft,
+          {'tool': 'rename_note', 'arguments': {'title': '新标题'}},
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('超长笔记上下文按单段和总长度限制安全裁剪', () {
     final context = AiNoteContext.fromTexts([
       AiNoteText(
@@ -13,6 +36,7 @@ void main() {
 
     expect(context.truncated, isTrue);
     expect(context.texts, hasLength(6));
+    expect(context.texts.map((text) => text.sourceElementId).toSet(), {'long'});
     expect(
       context.texts.fold<int>(0, (sum, text) => sum + text.text.runes.length),
       maxAiAgentContextLength,
@@ -221,7 +245,7 @@ void main() {
     );
   });
 
-  test('Markdown 插入内容转为文本框可显示的纯文本', () {
+  test('AI 插入保留可显示的 Markdown 并移除链接地址', () {
     final action = AiAgentAction.fromJson({
       'tool': 'insert_text',
       'arguments': {
@@ -235,7 +259,10 @@ void main() {
       },
     });
 
-    expect(action.value, '课堂总结\n\n重点：理解 Riverpod\n\n• 完成作业\n• flutter test');
+    expect(
+      action.value,
+      '# 课堂总结\n\n**重点**：理解 Riverpod\n\n- 完成作业\n- `flutter test`',
+    );
 
     expect(
       () => AiAgentAction.fromJson({

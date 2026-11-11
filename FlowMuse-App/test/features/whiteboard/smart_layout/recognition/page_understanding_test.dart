@@ -254,8 +254,8 @@ void main() {
         final frame = await codec.getNextFrame();
         try {
           final image = frame.image;
-          expect(image.width, lessThanOrEqualTo(2048));
-          expect(image.height, lessThanOrEqualTo(2048));
+          expect(image.width, lessThanOrEqualTo(1024));
+          expect(image.height, lessThanOrEqualTo(1024));
           expect(
             image.width * image.height,
             lessThanOrEqualTo(2 * 1024 * 1024),

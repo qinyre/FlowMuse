@@ -17,6 +17,66 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('普通插图覆盖导入前后的内容，点选与 PNG/SVG 顺序一致', () async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    const earlierId = ElementId('before-image');
+    const laterId = ElementId('after-image');
+    RectangleElement rectangle(ElementId id, String color) => RectangleElement(
+      id: id,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      backgroundColor: color,
+      strokeColor: color,
+      fillStyle: FillStyle.solid,
+    );
+
+    controller.applyResult(AddElementResult(rectangle(earlierId, '#00ff00')));
+    await controller.importImage(
+      await _makePng(100, 100, 0xffff0000),
+      'overlay.png',
+      const Size(100, 100),
+    );
+    final picture = controller.currentScene.activeElements
+        .whereType<ImageElement>()
+        .single;
+    controller.applyResult(AddElementResult(rectangle(laterId, '#0000ff')));
+    expect(
+      controller.currentScene.getElementAtPoint(const Point(50, 50))?.id,
+      picture.id,
+    );
+
+    final region = await controller.exportRegionPng(
+      const Rect.fromLTWH(0, 0, 100, 100),
+      maxLongestSide: 100,
+    );
+    final rendered = await _decodePng(region!);
+    addTearDown(rendered.dispose);
+    expect(await _pixelAt(rendered, 50, 50), (255, 0, 0));
+
+    final png = await controller.exportPng(scale: 1, selectedOnly: false);
+    final exported = await _decodePng(png!);
+    addTearDown(exported.dispose);
+    expect(
+      await _pixelAt(exported, exported.width ~/ 2, exported.height ~/ 2),
+      (255, 0, 0),
+    );
+    final svg = controller.exportSvg(selectedOnly: false);
+    final shape = svg.lastIndexOf('<path ');
+    expect(shape, greaterThanOrEqualTo(0));
+    expect(svg.indexOf('<image '), greaterThan(shape));
+
+    controller.applyResult(SetSelectionResult({laterId}));
+    final selected = await _decodePng((await controller.exportPng(scale: 1))!);
+    addTearDown(selected.dispose);
+    expect(
+      await _pixelAt(selected, selected.width ~/ 2, selected.height ~/ 2),
+      (0, 0, 255),
+    );
+  });
+
   test('基本导出:非空、PNG 签名、最长边不超过 1568', () async {
     // Given: 场景含 1 个文本元素 (0,0,100,50)（用内置字体，避免
     // google_fonts 在测试环境发起网络加载）

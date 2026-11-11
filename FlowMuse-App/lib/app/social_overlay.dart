@@ -17,8 +17,10 @@ final socialInboxPresenterProvider = Provider((ref) => SocialInboxPresenter());
 
 /// The mounted whiteboard supplies its existing save/leave guard.
 class SocialInboxPresenter {
-  final _boards = <Object, Future<void> Function(SocialNotice)>{};
+  final _boards = <Object, Future<void> Function([SocialNotice?])>{};
   Future<void> Function(SocialNotice)? get openFromWhiteboard =>
+      _boards.values.lastOrNull;
+  Future<void> Function()? get openInboxFromWhiteboard =>
       _boards.values.lastOrNull;
 
   void attach(
@@ -26,12 +28,12 @@ class SocialInboxPresenter {
     BuildContext context,
     Future<bool> Function() prepare,
   ) {
-    _boards[owner] = (notice) async {
+    _boards[owner] = ([SocialNotice? notice]) async {
       if (!context.mounted) return;
       await showSocialOverlay(
         context,
-        initialConversationId: notice.conversationId,
-        initialTab: notice.friendRequest ? 2 : 0,
+        initialConversationId: notice?.conversationId,
+        initialTab: notice?.friendRequest == true ? 2 : 0,
         prepareToOpenInvitation: prepare,
       );
     };

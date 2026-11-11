@@ -39,7 +39,8 @@ enum RecognitionVerifyReason {
   suspectedMiss('suspectedMiss'),
   maybeNonText('maybeNonText'),
   brokenNumbering('brokenNumbering'),
-  shapeMismatch('shapeMismatch');
+  shapeMismatch('shapeMismatch'),
+  coverageRecovery('coverageRecovery');
 
   const RecognitionVerifyReason(this.wireName);
 

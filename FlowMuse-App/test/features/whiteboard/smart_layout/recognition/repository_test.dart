@@ -124,6 +124,35 @@ void main() {
     );
   });
 
+  test('单次请求到期主动取消，迟到响应按超时处理', () async {
+    final transport = FakeRecognitionTransport(
+      responder: (body) async => buildBatchResponseBody(requestBodyOf(body)),
+    )..blockRequests();
+    final repository = RecognitionRepository(
+      gateway: SmartLayoutHttpGateway(
+        serverUri: Uri.parse('https://server.test'),
+        post: transport.post,
+      ),
+    );
+    final failed = expectLater(
+      repository.send(
+        requestOf(),
+        remainingBudget: const Duration(seconds: 1),
+        perRequestTimeout: const Duration(milliseconds: 10),
+      ),
+      throwsA(
+        isA<RecognitionException>()
+            .having((e) => e.code, 'code', 'requestTimeout')
+            .having((e) => e.retryable, 'retryable', false),
+      ),
+    );
+    await transport.firstRequestSeen.future;
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(transport.requests.single.cancelToken!.isCancelled, isTrue);
+    transport.release();
+    await failed;
+  });
+
   test('剩余预算为零：不发出请求', () async {
     final transport = FakeRecognitionTransport();
     final repository = RecognitionRepository(

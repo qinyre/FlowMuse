@@ -150,13 +150,16 @@ func (h *RecognitionHandler) runTranscribe(ctx context.Context, request *Recogni
 		prompt = BuildVerifyPrompt(request.Regions)
 	}
 	images := make([]ProviderImage, 0, len(request.Regions))
+	independent := verify
 	for _, region := range request.Regions {
 		images = append(images, ProviderImage{Base64: region.ImagePngBase64})
+		independent = independent && region.OriginalText == nil && region.OriginalConfidence == nil
 	}
 	raw, err := h.provider.Complete(ctx, ProviderRequest{
-		Stage:      request.Stage,
-		PromptText: prompt,
-		Images:     images,
+		Stage:             request.Stage,
+		IndependentVerify: independent,
+		PromptText:        prompt,
+		Images:            images,
 	})
 	if err != nil {
 		return nil, providerWireError(err)

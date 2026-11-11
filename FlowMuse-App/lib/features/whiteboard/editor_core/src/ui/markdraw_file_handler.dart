@@ -46,27 +46,36 @@ class MarkdrawFileHandler {
   }
 
   /// Shows a save dialog (or blob download on web) and writes the scene.
-  Future<void> saveAs() async {
+  Future<bool> saveAs() async {
     final content = controller.serializeSceneForExternalExport();
     if (kIsWeb) {
       downloadFile('drawing.markdraw', content);
-    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
-      await saveFileViaOhosChannel(
+      return true;
+    }
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      final uri = await saveFileViaOhosChannel(
         'drawing.markdraw',
         Uint8List.fromList(utf8.encode(content)),
+        chooseLocation: true,
       );
-    } else {
-      final path = await FilePicker.platform.saveFile(
-        dialogTitle: '保存绘图',
-        fileName: 'drawing.markdraw',
-        type: FileType.custom,
-        allowedExtensions: ['markdraw', 'excalidraw'],
-      );
-      if (path != null) {
-        await writeStringToFile(path, content);
-        currentFilePath = path;
-      }
+      return uri != null;
     }
+    final pickerWritesFile =
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: '保存绘图',
+      fileName: 'drawing.markdraw',
+      type: pickerWritesFile ? FileType.any : FileType.custom,
+      allowedExtensions: pickerWritesFile ? null : ['markdraw', 'excalidraw'],
+      bytes: pickerWritesFile ? Uint8List.fromList(utf8.encode(content)) : null,
+    );
+    if (path == null) return false;
+    if (!pickerWritesFile) {
+      await writeStringToFile(path, content);
+      currentFilePath = path;
+    }
+    return true;
   }
 
   /// Shows a file picker and loads the selected drawing.
@@ -131,6 +140,43 @@ class MarkdrawFileHandler {
       );
       if (path != null) await writeBytesToFile(path, bytes);
     }
+  }
+
+  /// Saves an already rendered PDF. Returns false if the picker was cancelled.
+  Future<bool> savePdf(Uint8List bytes) async {
+    var title = (controller.documentName ?? '')
+        .trim()
+        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+        .replaceFirst(RegExp(r'[. ]+$'), '');
+    if (title.isEmpty) title = '笔记';
+    if (RegExp(
+      r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)',
+      caseSensitive: false,
+    ).hasMatch(title)) {
+      title = '_$title';
+    }
+    final name = title.toLowerCase().endsWith('.pdf') ? title : '$title.pdf';
+    if (kIsWeb) {
+      downloadBytes(name, bytes, mimeType: 'application/pdf');
+      return true;
+    }
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      return await saveFileViaOhosChannel(name, bytes, chooseLocation: true) !=
+          null;
+    }
+    final mobile =
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: '导出为 PDF',
+      fileName: name,
+      type: mobile ? FileType.any : FileType.custom,
+      allowedExtensions: mobile ? null : const ['pdf'],
+      bytes: mobile ? bytes : null,
+    );
+    if (path == null) return false;
+    if (!mobile) await writeBytesToFile(path, bytes);
+    return true;
   }
 
   /// Exports the scene as SVG via a save dialog (or blob download).

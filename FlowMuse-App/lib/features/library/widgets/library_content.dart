@@ -54,9 +54,11 @@ class LibraryContent extends StatefulWidget {
     this.onMoveNoteToNotebook,
     this.onSetNoteTags,
     this.onDeleteNote,
+    this.welcome,
   });
 
   final bool compact;
+  final Widget? welcome;
   final LibraryHomeState state;
   final String title;
   final List<NoteItem> notes;
@@ -250,24 +252,50 @@ class _LibraryContentState extends State<LibraryContent> {
           const SizedBox(height: AppSpacing.controlGap),
         ],
       ],
-      body: _LibraryItems(
-        state: widget.state,
-        notes: widget.notes,
-        specialView: widget.specialView,
-        compact: widget.compact,
-        pageController: _pageController,
-        onPageChanged: _onPageChanged,
-        onSelectionChanged: widget.onSelectionChanged,
-        onCreate: widget.onCreate,
-        onJoinRoom: widget.onJoinRoom,
-        onOpenNote: widget.onOpenNote,
-        onRestoreNote: widget.onRestoreNote,
-        onDeleteNoteForever: widget.onDeleteNoteForever,
-        onRenameNote: widget.onRenameNote,
-        onMoveNoteToNotebook: widget.onMoveNoteToNotebook,
-        onSetNoteTags: widget.onSetNoteTags,
-        onDeleteNote: widget.onDeleteNote,
-      ),
+      body:
+          widget.welcome != null &&
+              widget.notes.isEmpty &&
+              !widget.state.selectionMode
+          ? SingleChildScrollView(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      widget.welcome!,
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: widget.onJoinRoom,
+                          icon: const Icon(LucideIcons.logIn, size: 18),
+                          label: const Text('已有邀请？加入房间'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : _LibraryItems(
+              state: widget.state,
+              notes: widget.notes,
+              specialView: widget.specialView,
+              compact: widget.compact,
+              pageController: _pageController,
+              onPageChanged: _onPageChanged,
+              onSelectionChanged: widget.onSelectionChanged,
+              onCreate: widget.onCreate,
+              onJoinRoom: widget.onJoinRoom,
+              onOpenNote: widget.onOpenNote,
+              onRestoreNote: widget.onRestoreNote,
+              onDeleteNoteForever: widget.onDeleteNoteForever,
+              onRenameNote: widget.onRenameNote,
+              onMoveNoteToNotebook: widget.onMoveNoteToNotebook,
+              onSetNoteTags: widget.onSetNoteTags,
+              onDeleteNote: widget.onDeleteNote,
+            ),
     );
   }
 }

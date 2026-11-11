@@ -1,5 +1,8 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -11,6 +14,81 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_
 import 'package:flow_muse/shared/widgets/keyboard_focus_recovery.dart';
 
 void main() {
+  for (final layeredWetInk in [true, false]) {
+    testWidgets('普通插图覆盖实时笔迹和提交笔迹（湿墨分层 $layeredWetInk）', (tester) async {
+      final controller = MarkdrawController(
+        writingFlags: WritingFeatureFlags(layeredWetInk: layeredWetInk),
+      );
+      addTearDown(controller.dispose);
+      await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawColor(const Color(0xffff0000), BlendMode.src);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(120, 120);
+        picture.dispose();
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        await controller.importImage(
+          data!.buffer.asUint8List(),
+          'red.png',
+          const Size(120, 120),
+        );
+      });
+      controller.applyResult(SetSelectionResult({}));
+      controller.switchTool(ToolType.freedraw);
+      controller.activeBrushType = BrushType.ballpoint;
+      final boundaryKey = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RepaintBoundary(
+              key: boundaryKey,
+              child: ListenableBuilder(
+                listenable: controller,
+                builder: (_, _) => EditorCanvas(controller: controller),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> expectImageAboveInk() async {
+        final boundary =
+            boundaryKey.currentContext!.findRenderObject()
+                as RenderRepaintBoundary;
+        final pixels = (await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          try {
+            final bytes = (await image.toByteData())!;
+            return (
+              bytes.getUint32((60 * image.width + 80) * 4),
+              bytes.getUint32((60 * image.width + 145) * 4),
+              bytes.getUint32((60 * image.width + 220) * 4),
+            );
+          } finally {
+            image.dispose();
+          }
+        }))!;
+        expect(pixels.$1, 0xff0000ff);
+        expect(pixels.$2, isNot(pixels.$3), reason: '图片范围外仍能看到笔迹');
+      }
+
+      final pen = await tester.startGesture(
+        const Offset(40, 60),
+        kind: PointerDeviceKind.stylus,
+      );
+      for (var x = 50.0; x <= 180; x += 10) {
+        await pen.moveTo(Offset(x, 60));
+      }
+      await tester.pump();
+      await expectImageAboveInk();
+      await pen.up();
+      await tester.pump();
+      await expectImageAboveInk();
+    });
+  }
+
   testWidgets('湿墨更新不遍历重绘静态笔迹，提交与撤销及时失效', (tester) async {
     final controller = MarkdrawController(
       writingFlags: const WritingFeatureFlags(layeredWetInk: true),

@@ -2,6 +2,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart' hide Element;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -10,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'package:flow_muse/shared/widgets/anchored_panel.dart';
 
 import 'color_picker.dart' as cp;
 
@@ -23,6 +25,8 @@ class PropertyPanelContent extends StatefulWidget {
   final bool isEditingText;
   final bool textOnly;
   final Size? canvasSize;
+  final Map<String, VoidCallback> selectionActions;
+  final bool comfortable;
 
   /// 宿主注入的归属动作 resolver（v4 §6.3）：editor_core 不解析
   /// customData，由宿主根据选中元素返回归属文案与聚焦回调。
@@ -41,15 +45,20 @@ class PropertyPanelContent extends StatefulWidget {
     this.textOnly = false,
     this.canvasSize,
     this.attributionActionResolver,
+    this.selectionActions = const {},
+    this.comfortable = false,
   });
 
   @override
   State<PropertyPanelContent> createState() => _PropertyPanelContentState();
 }
 
+enum _SelectionDetails { style, operations }
+
 class _PropertyPanelContentState extends State<PropertyPanelContent> {
   OverlayEntry? _fontPickerEntry;
   bool _fontPickerInserted = false;
+  _SelectionDetails? _details;
 
   MarkdrawController get controller => widget.controller;
   ElementStyle get style => widget.style;
@@ -61,6 +70,38 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   Size? get canvasSize => widget.canvasSize;
   bool get isFreedrawTool =>
       controller.editorState.activeToolType == ToolType.freedraw;
+  bool get inkOnly =>
+      elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
+  bool get inkStyle => isFreedrawTool || inkOnly;
+  double get sectionGap => widget.comfortable ? 20 : 8;
+
+  @override
+  void initState() {
+    super.initState();
+    _revealShortcutTarget();
+  }
+
+  @override
+  void didUpdateWidget(covariant PropertyPanelContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_details != null &&
+        !setEquals(
+          oldWidget.elements.map((e) => e.id).toSet(),
+          elements.map((e) => e.id).toSet(),
+        )) {
+      _details = null;
+    }
+    _revealShortcutTarget();
+  }
+
+  void _revealShortcutTarget() {
+    if (elements.isEmpty || isEditingText || isLocked) return;
+    final target = controller.pendingColorPicker;
+    if ((target == ColorPickerTarget.background && !textOnly && !inkStyle) ||
+        (target == ColorPickerTarget.font && showFullTextProps)) {
+      _details = _SelectionDetails.style;
+    }
+  }
 
   @override
   void dispose() {
@@ -88,15 +129,12 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             );
           }(),
         ],
-        IgnorePointer(
-          ignoring: isLocked,
-          child: Opacity(
-            opacity: isLocked ? 0.4 : 1.0,
-            child: _buildStylePanel(context),
-          ),
-        ),
-        if (elements.isNotEmpty) ...[
-          const SizedBox(height: 12),
+        _buildStylePanel(context),
+        if (elements.isNotEmpty) _buildSelectionFooter(context),
+        if (_details == _SelectionDetails.style)
+          _buildStylePanel(context, advancedOnly: true),
+        if (_details == _SelectionDetails.operations) ...[
+          const SizedBox(height: 8),
           _buildSectionLabel(context, '图层顺序'),
           _buildLayerButtons(context),
           const SizedBox(height: 8),
@@ -106,6 +144,114 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           _buildActionsRow(context),
         ],
       ],
+    );
+  }
+
+  Widget _buildSelectionFooter(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 12),
+        Wrap(
+          spacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (widget.selectionActions.isNotEmpty)
+              _buildSelectionAiMenu(context),
+            if (inkOnly || _details != null)
+              TextButton(
+                onPressed: () => setState(() {
+                  _details = _details == null
+                      ? _SelectionDetails.operations
+                      : null;
+                }),
+                child: Text(
+                  _details == null
+                      ? '更多操作'
+                      : inkOnly
+                      ? '收起操作'
+                      : '收起详情',
+                ),
+              )
+            else
+              _buildSelectionMenu<_SelectionDetails>(
+                label: '更多',
+                onSelected: (value) => setState(() => _details = value),
+                items: [
+                  anchoredActionMenuItem(
+                    context,
+                    value: _SelectionDetails.style,
+                    icon: Icons.palette_outlined,
+                    label: '详细样式',
+                  ),
+                  anchoredActionMenuItem(
+                    context,
+                    value: _SelectionDetails.operations,
+                    icon: Icons.layers_outlined,
+                    label: '排列与操作',
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionAiMenu(BuildContext context) {
+    return _buildSelectionMenu<VoidCallback>(
+      label: 'AI 助手',
+      icon: Icons.auto_awesome_outlined,
+      onSelected: (action) => action(),
+      items: [
+        for (final action in widget.selectionActions.entries)
+          anchoredActionMenuItem(
+            context,
+            value: action.value,
+            icon: switch (action.key) {
+              '解释这段' => Icons.chat_bubble_outline,
+              '整理为笔记' => Icons.edit_note_outlined,
+              _ => Icons.auto_awesome_outlined,
+            },
+            label: action.key,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionMenu<T extends Object>({
+    required String label,
+    IconData? icon,
+    required List<PopupMenuEntry<T>> items,
+    required ValueChanged<T> onSelected,
+  }) {
+    return Builder(
+      builder: (buttonContext) => TextButton(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        onPressed: () async {
+          final selected = await showAnchoredPopupMenu<T>(
+            context: buttonContext,
+            placement: AnchoredPopupPlacement.below,
+            items: items,
+          );
+          if (mounted && selected != null) onSelected(selected);
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 18),
+              const SizedBox(width: 6),
+            ],
+            Text(label),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 16),
+          ],
+        ),
+      ),
     );
   }
 
@@ -148,21 +294,27 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     );
   }
 
-  Widget _buildStylePanel(BuildContext context) {
-    return Column(
+  Widget _buildStylePanel(BuildContext context, {bool advancedOnly = false}) {
+    final showAdvanced = advancedOnly || elements.isEmpty;
+    final showFontSize =
+        style.hasText &&
+        (elements.isEmpty || (textOnly ? !advancedOnly : advancedOnly));
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, isFreedrawTool ? '颜色' : '描边'),
-        _buildColorPickerRow(
-          context,
-          selected: style.strokeColor,
-          onSelect: (c) =>
-              controller.applyStyleChange(ElementStyle(strokeColor: c)),
-          quickPicks: strokeQuickPicks,
-          target: ColorPickerTarget.stroke,
-        ),
+        if (!advancedOnly) ...[
+          _buildSectionLabel(context, inkStyle || textOnly ? '颜色' : '描边'),
+          _buildColorPickerRow(
+            context,
+            selected: style.strokeColor,
+            onSelect: (c) =>
+                controller.applyStyleChange(ElementStyle(strokeColor: c)),
+            quickPicks: strokeQuickPicks,
+            target: ColorPickerTarget.stroke,
+          ),
+        ],
         if (!textOnly) ...[
-          if (!isFreedrawTool) ...[
+          if (showAdvanced && !inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '背景'),
             _buildColorPickerRow(
@@ -177,10 +329,12 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildSectionLabel(context, '填充样式'),
             _buildFillStyleRow(context, style.fillStyle),
           ],
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, isFreedrawTool ? '笔迹粗细' : '描边宽度'),
-          _buildStrokeWidthRow(context, style.strokeWidth),
-          if (!isFreedrawTool) ...[
+          if (!advancedOnly) ...[
+            SizedBox(height: sectionGap),
+            _buildSectionLabel(context, inkStyle ? '笔迹粗细' : '描边宽度'),
+            _buildStrokeWidthRow(context, style.strokeWidth),
+          ],
+          if (showAdvanced && !inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '描边样式'),
             _buildStrokeStyleRow(context, style.strokeStyle),
@@ -194,22 +348,22 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             ],
           ],
         ],
-        if (style.hasArrows) ...[
+        if (showAdvanced && style.hasArrows) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '箭头类型'),
           _buildArrowTypeRow(context, style.arrowType),
         ],
-        if (showFullTextProps) ...[
+        if (showAdvanced && showFullTextProps) ...[
           const SizedBox(height: 12),
           _buildSectionLabel(context, '字体'),
           _buildFontPicker(context, style.fontFamily),
         ],
-        if (style.hasText) ...[
+        if (showFontSize) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '字号'),
           _buildFontSizeRow(context, style.fontSize),
         ],
-        if (showFullTextProps) ...[
+        if (showAdvanced && showFullTextProps) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '文字对齐'),
           _buildTextAlignCombinedRow(
@@ -218,7 +372,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             style.verticalAlign,
           ),
         ],
-        if (style.hasArrows) ...[
+        if (showAdvanced && style.hasArrows) ...[
           const SizedBox(height: 8),
           _buildArrowheadRow(
             context,
@@ -256,11 +410,15 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             },
           ),
         ],
-        const SizedBox(height: 8),
-        _buildSectionLabel(context, '透明度'),
-        _buildOpacitySlider(context, style.opacity),
+        if (!advancedOnly) ...[
+          SizedBox(height: sectionGap),
+          _buildSectionLabel(context, '透明度'),
+          _buildOpacitySlider(context, style.opacity),
+        ],
       ],
     );
+    if (!isLocked) return content;
+    return IgnorePointer(child: Opacity(opacity: 0.4, child: content));
   }
 
   // --- Helper builders ---
@@ -271,7 +429,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: widget.comfortable ? 12 : 11,
           fontWeight: FontWeight.w600,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
@@ -295,10 +453,13 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         for (final c in quickPicks)
           Padding(
             padding: const EdgeInsets.only(right: 4),
-            child: cp.ColorSwatch(
-              color: c,
-              isSelected: selected == c,
-              onTap: () => onSelect(c),
+            child: SizedBox.square(
+              dimension: widget.comfortable ? 28 : 24,
+              child: cp.ColorSwatch(
+                color: c,
+                isSelected: selected == c,
+                onTap: () => onSelect(c),
+              ),
             ),
           ),
         Container(
@@ -307,21 +468,24 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           color: Theme.of(context).dividerColor,
         ),
-        cp.ColorPickerButton(
-          color: selected ?? '#000000',
-          isActive: !isQuickPick,
-          onColorSelected: onSelect,
-          onRenderScene: canvasSize != null
-              ? controller.renderSceneImage
-              : null,
-          canvasSize: canvasSize,
-          canvasGlobalOffset: controller.canvasGlobalOffset,
-          autoOpen: shouldAutoOpen,
-          onAutoOpened: controller.clearPendingColorPicker,
-          autoActivateEyedropper:
-              target == ColorPickerTarget.stroke &&
-              controller.pendingEyedropper,
-          onEyedropperActivated: controller.clearPendingEyedropper,
+        SizedBox.square(
+          dimension: widget.comfortable ? 28 : 24,
+          child: cp.ColorPickerButton(
+            color: selected ?? '#000000',
+            isActive: !isQuickPick,
+            onColorSelected: onSelect,
+            onRenderScene: canvasSize != null
+                ? controller.renderSceneImage
+                : null,
+            canvasSize: canvasSize,
+            canvasGlobalOffset: controller.canvasGlobalOffset,
+            autoOpen: shouldAutoOpen,
+            onAutoOpened: controller.clearPendingColorPicker,
+            autoActivateEyedropper:
+                target == ColorPickerTarget.stroke &&
+                controller.pendingEyedropper,
+            onEyedropperActivated: controller.clearPendingEyedropper,
+          ),
         ),
       ],
     );
@@ -332,21 +496,24 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     const displayWidths = [1.0, 2.0, 3.5, 5.0];
     const tooltips = ['细', '中', '粗', '特粗'];
     return Wrap(
-      spacing: 4,
+      spacing: widget.comfortable ? 8 : 4,
       runSpacing: 4,
       children: [
         for (var i = 0; i < widths.length; i++)
-          IconToggleChip(
-            isSelected: current == widths[i],
-            onTap: () => controller.applyStyleChange(
-              ElementStyle(strokeWidth: widths[i]),
-            ),
-            tooltip: tooltips[i],
-            child: CustomPaint(
-              size: const Size(20, 20),
-              painter: StrokeWidthIcon(
-                displayWidths[i],
-                color: Theme.of(context).colorScheme.onSurface,
+          SizedBox.square(
+            dimension: widget.comfortable ? 40 : 32,
+            child: IconToggleChip(
+              isSelected: current == widths[i],
+              onTap: () => controller.applyStyleChange(
+                ElementStyle(strokeWidth: widths[i]),
+              ),
+              tooltip: tooltips[i],
+              child: CustomPaint(
+                size: const Size(20, 20),
+                painter: StrokeWidthIcon(
+                  displayWidths[i],
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
             ),
           ),
@@ -436,7 +603,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     return Align(
       alignment: Alignment.centerLeft,
       child: SizedBox(
-        width: 160,
+        width: widget.comfortable ? double.infinity : 160,
         child: SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 2,
@@ -800,9 +967,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   Widget _buildActionsRow(BuildContext context) {
     final hasGroup = elements.any((e) => e.groupIds.isNotEmpty);
     final isSingle = elements.length == 1;
-    final canConvertInk =
-        elements.isNotEmpty &&
-        elements.every((element) => element is FreedrawElement);
+    final canConvertInk = inkOnly;
     final isMindmapNode =
         isSingle && MindmapUtils.isMindmapNode(elements.first);
 
@@ -822,6 +987,12 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             onTap: controller.mindmapAddSibling,
             tooltip: '同级节点 (Enter)',
             child: const Icon(Icons.low_priority, size: 18),
+          ),
+          IconToggleChip(
+            isSelected: false,
+            onTap: controller.mindmapTidy,
+            tooltip: '整理导图',
+            child: const Icon(Icons.auto_fix_high, size: 18),
           ),
         ],
         IconToggleChip(
@@ -1368,36 +1539,54 @@ class _AttributionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HoverTooltip(
-            message: attributionLabel,
-            showOnLongPress: true,
-            child: Text(
-              attributionLabel,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          HoverTooltip(
-            message: actionLabel,
-            showOnLongPress: true,
-            child: TextButton.icon(
-              onPressed: onPressed,
-              style: TextButton.styleFrom(alignment: Alignment.centerLeft),
-              icon: const Icon(Icons.center_focus_strong, size: 16),
-              label: Text(
-                actionLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: HoverTooltip(
+        message: '$actionLabel\n$attributionLabel',
+        showOnLongPress: true,
+        child: Semantics(
+          button: true,
+          label: actionLabel,
+          child: Material(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          attributionLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.center_focus_strong,
+                        size: 16,
+                        color: colors.primary,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

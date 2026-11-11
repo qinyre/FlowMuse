@@ -541,7 +541,7 @@ abstract final class SemanticComposer {
             math.max(1, figures),
       );
       for (final b in track) {
-        double w, h;
+        double w, h, inkWidth;
         var lines = 1;
         var font = 0.0;
         if (b.text != null) {
@@ -549,7 +549,8 @@ abstract final class SemanticComposer {
           final m = _measure(b.text!, w, measure);
           if (m.overflows || m.height <= 0) throw _CannotFit(ids);
           h = m.height;
-          w = m.width;
+          w = m.paintWidth;
+          inkWidth = m.width;
           lines = m.lineCount;
           font = b.text!.fontSize;
         } else if (b.figure != null) {
@@ -567,6 +568,7 @@ abstract final class SemanticComposer {
           );
           w = size.width;
           h = size.height;
+          inkWidth = w;
         } else {
           throw _CannotFit(ids);
         }
@@ -582,7 +584,7 @@ abstract final class SemanticComposer {
           ),
         );
         y += h + policy.innerGap;
-        occupiedWidth = math.max(occupiedWidth, w);
+        occupiedWidth = math.max(occupiedWidth, inkWidth);
       }
       totalHeight = math.max(totalHeight, y - policy.innerGap);
       left += occupiedWidth + policy.innerGap;

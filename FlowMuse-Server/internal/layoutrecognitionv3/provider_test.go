@@ -18,8 +18,19 @@ import (
 )
 
 func TestOpenAICompatProviderReasoningEffort(t *testing.T) {
-	for _, model := range []string{"doubao-seed-2-1-turbo-260628", "other-compatible-model", "ep-model-alias"} {
-		t.Run(model, func(t *testing.T) {
+	for _, tc := range []struct {
+		model, stage, effort string
+		independent          bool
+	}{
+		{"doubao-seed-2-1-turbo-260628", StageRead, "minimal", false},
+		{"deepseek-v4-flash", StageRead, "none", false},
+		{"deepseek-v4-flash", StageVerify, "low", false},
+		{"deepseek-v4-flash", StageVerify, "none", true},
+		{"deepseek-v4-flash", StageStructure, "none", false},
+		{"other-compatible-model", StageRead, "", false},
+		{"ep-model-alias", StageStructure, "", false},
+	} {
+		t.Run(tc.model+"/"+tc.stage+"/"+tc.effort, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost || r.URL.Path != "/chat/completions" ||
 					r.Header.Get("Authorization") != "Bearer test-key" {
@@ -31,16 +42,12 @@ func TestOpenAICompatProviderReasoningEffort(t *testing.T) {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
-				if payload["model"] != model || payload["temperature"] != float64(0) {
+				if payload["model"] != tc.model || payload["temperature"] != float64(0) {
 					t.Error("不得更换模型或温度")
 				}
 				effort, present := payload["reasoning_effort"]
-				if model == "doubao-seed-2-1-turbo-260628" {
-					if effort != "minimal" {
-						t.Error("已验证的豆包型号应使用 minimal")
-					}
-				} else if present {
-					t.Error("其他兼容模型不得收到未经验证的思考参数")
+				if present != (tc.effort != "") || present && effort != tc.effort {
+					t.Errorf("思考参数不匹配，收到 %v，预期 %q", effort, tc.effort)
 				}
 				if _, present := payload["max_tokens"]; present {
 					t.Error("本次优化不得新增输出截断上限")
@@ -68,10 +75,10 @@ func TestOpenAICompatProviderReasoningEffort(t *testing.T) {
 				_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"synthetic-result"}}]}`)
 			}))
 			defer server.Close()
-			provider := NewOpenAICompatProvider(server.URL, "test-key", model)
+			provider := NewOpenAICompatProvider(server.URL, "test-key", tc.model)
 			output, err := provider.Complete(context.Background(), ProviderRequest{
-				Stage: StageRead, PromptText: "synthetic-prompt",
-				Images: []ProviderImage{{Base64: "synthetic-image"}},
+				Stage: tc.stage, IndependentVerify: tc.independent,
+				PromptText: "synthetic-prompt", Images: []ProviderImage{{Base64: "synthetic-image"}},
 			})
 			if err != nil || output != "synthetic-result" {
 				t.Fatal("provider 未保留原有结果")

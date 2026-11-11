@@ -54,6 +54,7 @@ func TestBuildVerifyPromptAnchors(t *testing.T) {
 		"lowConfidence",
 		"初读结果",
 		"0.42",
+		"无法确认整行时",
 	}
 	for _, anchor := range anchors {
 		if !strings.Contains(prompt, anchor) {

@@ -1,3 +1,5 @@
+import 'package:flow_muse/features/guide/view_models/guide_welcome_view_model.dart';
+import '../../support/test_local_settings_repository.dart';
 import 'package:flow_muse/app/flow_muse_app.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flutter/widgets.dart';
@@ -9,6 +11,9 @@ import '../../support/test_library_index_notifier.dart';
 Widget _testApp() {
   return ProviderScope(
     overrides: [
+      guideSettingsRepositoryProvider.overrideWithValue(
+        TestLocalSettingsRepository(),
+      ),
       libraryIndexProvider.overrideWith(TestLibraryIndexNotifier.new),
     ],
     child: FlowMuseApp(),

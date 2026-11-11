@@ -46,6 +46,27 @@ class Scene {
     return sorted;
   }();
 
+  List<Element> get canvasContentElements => _canvasLayers.content;
+  List<Element> get foregroundImages => _canvasLayers.images;
+
+  late final List<Element> paintOrderedElements = foregroundImages.isEmpty
+      ? canvasContentElements
+      : List.unmodifiable([...canvasContentElements, ...foregroundImages]);
+
+  late final ({List<Element> content, List<Element> images}) _canvasLayers =
+      () {
+        final content = <Element>[];
+        final images = <Element>[];
+        for (final element in orderedElements) {
+          if (element.isDeleted) continue;
+          (element.isForegroundImage ? images : content).add(element);
+        }
+        return (
+          content: List<Element>.unmodifiable(content),
+          images: List<Element>.unmodifiable(images),
+        );
+      }();
+
   /// Returns a new scene with the element added.
   Scene addElement(Element element) {
     return Scene._([..._elements, element], files, smartLayout);
@@ -70,6 +91,19 @@ class Scene {
     return Scene._(updated, files, smartLayout);
   }
 
+  Scene updateElements(Iterable<Element> elements) {
+    final updates = {for (final element in elements) element.id: element};
+    if (updates.isEmpty) return this;
+    return Scene._(
+      [
+        for (final element in _elements)
+          updates[element.id]?.bumpVersion() ?? element,
+      ],
+      files,
+      smartLayout,
+    );
+  }
+
   /// Replaces existing elements without changing their collaboration version.
   Scene upsertRemoteElements(Iterable<Element> elements) {
     final updates = {for (final element in elements) element.id: element};
@@ -85,12 +119,52 @@ class Scene {
   }
 
   /// Finds an element by [id], or returns null.
-  Element? getElementById(ElementId id) {
-    for (final e in _elements) {
-      if (e.id == id) return e;
+  Element? getElementById(ElementId id) => _elementsById[id];
+
+  late final Map<ElementId, Element> _elementsById = () {
+    final result = <ElementId, Element>{};
+    for (final element in _elements) {
+      result.putIfAbsent(element.id, () => element);
     }
-    return null;
-  }
+    return result;
+  }();
+
+  List<ArrowElement> findBoundArrows(ElementId id) =>
+      List.of(_boundArrowsByTarget[id.value] ?? const []);
+
+  List<FrameElement> get activeFrames => _activeFrames;
+
+  late final List<FrameElement> _activeFrames = List.unmodifiable(
+    _elements.whereType<FrameElement>().where((element) => !element.isDeleted),
+  );
+
+  List<Element> findFrameChildren(ElementId id) =>
+      List.of(_childrenByFrame[id.value] ?? const []);
+
+  late final Map<String, List<Element>> _childrenByFrame = () {
+    final result = <String, List<Element>>{};
+    for (final element in _elements) {
+      if (!element.isDeleted && element.frameId != null) {
+        (result[element.frameId!] ??= []).add(element);
+      }
+    }
+    return result;
+  }();
+
+  late final Map<String, List<ArrowElement>> _boundArrowsByTarget = () {
+    final result = <String, List<ArrowElement>>{};
+    for (final element in _elements) {
+      if (element is! ArrowElement || element.isDeleted) continue;
+      final targets = {
+        element.startBinding?.elementId,
+        element.endBinding?.elementId,
+      };
+      for (final target in targets) {
+        if (target != null) (result[target] ??= []).add(element);
+      }
+    }
+    return result;
+  }();
 
   /// Soft-deletes the element with the given [id].
   Scene softDeleteElement(ElementId id) {
@@ -155,8 +229,8 @@ class Scene {
   static const double _lineHitThreshold = 8.0;
 
   Element? getElementAtPoint(Point point, {bool Function(Element)? where}) {
-    final ordered = orderedElements.where((e) => !e.isDeleted).toList();
-    // Iterate in reverse to find topmost (highest index) first.
+    final ordered = paintOrderedElements;
+    // Iterate in reverse paint order to find the visible top element.
     for (var i = ordered.length - 1; i >= 0; i--) {
       final e = ordered[i];
       if (e.isCanvasPage || e.isPdfBackground) continue;

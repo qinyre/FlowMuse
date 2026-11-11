@@ -9,6 +9,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 void showCompactPropertyPanel(
   BuildContext context,
   MarkdrawController controller, {
+  Map<String, VoidCallback> selectionActions = const {},
   ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver,
@@ -83,6 +84,13 @@ void showCompactPropertyPanel(
                   textOnly: textOnly,
                   canvasSize: controller.canvasSize,
                   attributionActionResolver: attributionActionResolver,
+                  selectionActions: {
+                    for (final action in selectionActions.entries)
+                      action.key: () {
+                        Navigator.of(ctx).pop();
+                        action.value();
+                      },
+                  },
                 ),
               ],
             ),

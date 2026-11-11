@@ -13,6 +13,12 @@ enum VerticalAlign { top, middle, bottom }
 /// A text drawing element.
 class TextElement extends Element {
   static const defaultFontFamily = 'Nunito';
+  static const mindmapLabelRole = 'mindmap-label';
+
+  bool get isMindmapLabel {
+    final data = customData?['flowMuse'];
+    return data is Map && data['role'] == mindmapLabelRole;
+  }
 
   final String text;
   final double fontSize;

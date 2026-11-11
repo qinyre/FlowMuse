@@ -50,6 +50,52 @@ class NativeHttpClient {
   static const MethodChannel _channel = MethodChannel(_channelName);
   static int _nextRequestId = 0;
 
+  static bool get supportsStreaming =>
+      kIsWeb || defaultTargetPlatform != TargetPlatform.ohos;
+
+  static Future<NativeHttpResponse> postStreaming({
+    required String url,
+    required Map<String, String> headers,
+    required String body,
+    required Future<String> Function(Stream<List<int>>) readEvents,
+    NativeHttpCancelToken? cancelToken,
+  }) async {
+    cancelToken?._throwIfCancelled();
+    final client = http.Client();
+    cancelToken?._attach(client.close);
+    const timeout = Duration(seconds: 130);
+    try {
+      final request = http.Request('POST', Uri.parse(url))
+        ..headers.addAll(headers)
+        ..body = body;
+      final response = await client.send(request).timeout(timeout);
+      var received = 0;
+      final bytes = response.stream.timeout(timeout).map((chunk) {
+        received += chunk.length;
+        if (received > 1024 * 1024) {
+          throw const FormatException('AI 响应过长');
+        }
+        return chunk;
+      });
+      final isEvents =
+          response.statusCode == 200 &&
+          (response.headers['content-type'] ?? '').startsWith(
+            'text/event-stream',
+          );
+      final result =
+          await (isEvents ? readEvents(bytes) : utf8.decoder.bind(bytes).join())
+              .timeout(timeout);
+      cancelToken?._throwIfCancelled();
+      return NativeHttpResponse(statusCode: response.statusCode, body: result);
+    } catch (_) {
+      cancelToken?._throwIfCancelled();
+      rethrow;
+    } finally {
+      cancelToken?._detach();
+      client.close();
+    }
+  }
+
   static Future<NativeHttpResponse> post({
     required String url,
     Map<String, String> headers = const {},

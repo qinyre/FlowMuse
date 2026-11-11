@@ -15,10 +15,13 @@ class CompactMenuButton extends StatelessWidget {
   final ThemeMode? currentThemeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportPdf;
   final VoidCallback? onExportSmartMarkdown;
   final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
@@ -33,10 +36,13 @@ class CompactMenuButton extends StatelessWidget {
     this.currentThemeMode,
     this.onThemeModeChanged,
     this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     this.onSave,
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportPdf,
     this.onExportSmartMarkdown,
     this.onExportSmartLatex,
     this.onShare,
@@ -88,6 +94,13 @@ class CompactMenuButton extends StatelessWidget {
               _compactMenuItem(Icons.folder_open, '打开', () {
                 closeThen(onOpen!);
               }),
+            if (onOpenBeside != null)
+              _compactMenuItem(
+                Icons.vertical_split_outlined,
+                openBesideDisabledReason ?? '并排打开',
+                () => closeThen(onOpenBeside!),
+                enabled: openBesideDisabledReason == null,
+              ),
             if (onSave != null)
               _compactMenuItem(Icons.save, '保存', () {
                 closeThen(onSave!);
@@ -107,6 +120,10 @@ class CompactMenuButton extends StatelessWidget {
                 ),
               );
             }),
+            if (onExportPdf != null)
+              _compactMenuItem(Icons.picture_as_pdf_outlined, '导出为 PDF', () {
+                closeThen(onExportPdf!);
+              }),
             if (onExportPng != null)
               _compactMenuItem(Icons.image, '导出 PNG', () {
                 closeThen(onExportPng!);
@@ -137,7 +154,10 @@ class CompactMenuButton extends StatelessWidget {
               _compactMenuItem(Icons.share, '分享', () {
                 closeThen(onShare!);
               }),
-            if (onExportPng != null || onExportSvg != null) const Divider(),
+            if (onExportPng != null ||
+                onExportSvg != null ||
+                onExportPdf != null)
+              const Divider(),
             if (onImportImage != null)
               _compactMenuItem(Icons.add_photo_alternate, '导入图片', () {
                 closeThen(onImportImage!);

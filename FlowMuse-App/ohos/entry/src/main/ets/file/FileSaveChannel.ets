@@ -7,9 +7,8 @@ type FileSaveArgs = Map<string, ESObject>;
 /**
  * HarmonyOS file save channel.
  *
- * Uses CoreFileKit's DocumentViewPicker in DOWNLOAD mode to save files
- * directly to the Downloads/<package>/ directory without showing a UI dialog,
- * then writes content via fileIo.
+ * Uses CoreFileKit's DocumentViewPicker to save to Downloads or to a location
+ * selected by the user, then writes content via fileIo.
  */
 export class FileSaveChannel {
   private readonly context: Context;
@@ -30,58 +29,48 @@ export class FileSaveChannel {
           return;
         }
         this.saveFile(call.args as FileSaveArgs)
-          .then((savedPath: string) => result.success(savedPath))
+          .then((savedPath: string | null) => result.success(savedPath))
           .catch((error: BusinessError) => {
-            result.error('FILE_SAVE_FAILED', error.message ?? `${error}`, error);
+            result.error('FILE_SAVE_FAILED', error.message ?? `${error}`, null);
           });
       }
     });
   }
 
-  private async saveFile(args: FileSaveArgs): Promise<string> {
+  private async saveFile(args: FileSaveArgs): Promise<string | null> {
     const fileName = args.get('fileName') as string;
     const bytes = args.get('bytes') as Uint8Array;
     if (!fileName || !bytes) {
       throw new Error('fileName and bytes are required');
     }
 
-    // Use DOWNLOAD mode to save directly to Downloads/<package>/ without UI.
+    const chooseLocation = args.get('chooseLocation') === true;
     const saveOptions = new picker.DocumentSaveOptions();
-    saveOptions.newFileNames = [fileName];
-    saveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+    if (chooseLocation) {
+      saveOptions.newFileNames = [fileName];
+    } else {
+      saveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
+    }
 
     const documentViewPicker = new picker.DocumentViewPicker(this.context);
+    const uris = await documentViewPicker.save(saveOptions);
+    if (!uris || uris.length === 0) return null;
 
-    // Wrap the callback-based save() API in a Promise.
-    const uris: string[] = await new Promise<string[]>((resolve, reject) => {
-      documentViewPicker.save(saveOptions).then(
-        (docSaveResult: string[]) => {
-          if (!docSaveResult || docSaveResult.length === 0) {
-            reject(new Error('User cancelled save'));
-            return;
-          }
-          resolve(docSaveResult);
-        }
-      ).catch((err: BusinessError) => {
-        reject(new Error(`Picker save failed: ${err.message ?? err}`));
-      });
-    });
-
-    // Build the target file path under the returned download URI.
-    const dirUri = uris[0];
-    const targetPath = new fileUri.FileUri(`${dirUri}/${fileName}`).path;
-
-    // Write bytes to the file.
-    const file = fileIo.openSync(
-      targetPath,
-      fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE
-    );
+    const target = chooseLocation ? uris[0] : new fileUri.FileUri(`${uris[0]}/${fileName}`).path;
+    const mode = fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC |
+      (chooseLocation ? 0 : fileIo.OpenMode.CREATE);
+    const file = fileIo.openSync(target, mode);
     try {
-      fileIo.writeSync(file.fd, bytes.buffer);
+      const buffer = bytes.byteLength === bytes.buffer.byteLength
+        ? bytes.buffer
+        : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      if (fileIo.writeSync(file.fd, buffer) !== bytes.byteLength) {
+        throw new Error('Incomplete file write');
+      }
     } finally {
       fileIo.closeSync(file.fd);
     }
 
-    return targetPath;
+    return target;
   }
 }
