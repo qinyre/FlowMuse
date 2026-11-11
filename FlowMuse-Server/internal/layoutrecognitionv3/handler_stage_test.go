@@ -199,6 +199,17 @@ func TestHandlerVerifyStage(t *testing.T) {
 	if provider.lastReq.Stage != StageVerify {
 		t.Fatal("provider 日志阶段应为 verify")
 	}
+	if !provider.lastReq.IndependentVerify {
+		t.Fatal("未携带初读结果的普通复核应走快速独立模式")
+	}
+	provider.responses = append(provider.responses,
+		`[{"regionId":"r:a","status":"recognized","text":"复核正文","confidence":0.88,"diagnostics":[]},{"regionId":"r:b","status":"nonText","diagnostics":[]}]`,
+	)
+	rec, _ = post(t, handler, strings.ReplaceAll(verifyRequestBody(), "lowConfidence", "coverageRecovery"))
+	if rec.Code != http.StatusOK || !provider.lastReq.IndependentVerify ||
+		!strings.Contains(provider.lastReq.PromptText, "没有可靠的整行转写") {
+		t.Fatal("漏答补读应使用快速独立模式和单独的提示")
+	}
 }
 
 func TestHandlerStructureStage(t *testing.T) {

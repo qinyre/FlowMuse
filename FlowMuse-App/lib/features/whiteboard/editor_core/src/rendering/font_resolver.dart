@@ -123,15 +123,15 @@ class FontResolver {
   static TextStyle resolve(String fontFamily, {TextStyle? baseStyle}) {
     final base = baseStyle ?? const TextStyle();
 
-    if (_bundledFonts.contains(fontFamily)) {
-      return base.copyWith(fontFamily: fontFamily);
-    }
-    if (fontFamily == 'Helvetica') {
+    if (fontFamily == 'Excalifont' || fontFamily == 'Helvetica') {
       // Keep the standard Excalidraw font ID while resolving CJK glyphs locally.
       return base.copyWith(
         fontFamily: fontFamily,
         fontFamilyFallback: ['FlowMuseSans', ...?base.fontFamilyFallback],
       );
+    }
+    if (_bundledFonts.contains(fontFamily)) {
+      return base.copyWith(fontFamily: fontFamily);
     }
 
     if (_googleFonts.contains(fontFamily)) {

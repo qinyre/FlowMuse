@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// 真实排版测量结果（任务 V3-300A）。
 ///
 /// 契约：不估算、不截断——[width] 是真实最宽行宽。引擎对超长词会在词内
@@ -21,6 +23,10 @@ final class TextMeasureResult {
 
   /// 是否存在无法断行而超出 [maxWidth] 的原子字素簇。
   final bool overflows;
+
+  /// Keep a small rounding margin when the measured text is laid out again.
+  double get paintWidth =>
+      width == 0 ? 0 : math.min(maxWidth, width.ceilToDouble() + 1);
 
   const TextMeasureResult({
     required this.width,

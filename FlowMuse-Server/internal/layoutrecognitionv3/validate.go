@@ -25,7 +25,7 @@ var (
 	validStructureRoles = map[string]bool{"title": true, "body": true, "caption": true, "listItem": true, "other": true}
 	validRoleHints      = map[string]bool{"title": true, "body": true, "caption": true, "listItem": true}
 	validListTypes      = map[string]bool{"ordered": true, "unordered": true}
-	validVerifyReasons  = map[string]bool{"lowConfidence": true, "suspectedMiss": true, "maybeNonText": true, "brokenNumbering": true, "shapeMismatch": true}
+	validVerifyReasons  = map[string]bool{"lowConfidence": true, "suspectedMiss": true, "maybeNonText": true, "brokenNumbering": true, "shapeMismatch": true, "coverageRecovery": true}
 )
 
 // ValidateRequest 是入站校验（请求侧 400 口径，客户端发送前自检同一套
