@@ -21,6 +21,7 @@ class CompactMenuButton extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportPdf;
   final VoidCallback? onExportSmartMarkdown;
   final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
@@ -41,6 +42,7 @@ class CompactMenuButton extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportPdf,
     this.onExportSmartMarkdown,
     this.onExportSmartLatex,
     this.onShare,
@@ -118,6 +120,10 @@ class CompactMenuButton extends StatelessWidget {
                 ),
               );
             }),
+            if (onExportPdf != null)
+              _compactMenuItem(Icons.picture_as_pdf_outlined, '导出为 PDF', () {
+                closeThen(onExportPdf!);
+              }),
             if (onExportPng != null)
               _compactMenuItem(Icons.image, '导出 PNG', () {
                 closeThen(onExportPng!);
@@ -148,7 +154,10 @@ class CompactMenuButton extends StatelessWidget {
               _compactMenuItem(Icons.share, '分享', () {
                 closeThen(onShare!);
               }),
-            if (onExportPng != null || onExportSvg != null) const Divider(),
+            if (onExportPng != null ||
+                onExportSvg != null ||
+                onExportPdf != null)
+              const Divider(),
             if (onImportImage != null)
               _compactMenuItem(Icons.add_photo_alternate, '导入图片', () {
                 closeThen(onImportImage!);

@@ -26,6 +26,7 @@ import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../rendering/export/pdf_note_exporter.dart' deferred as pdf_export;
 import '../rendering/page_reading_position.dart';
 import '../rendering/local_wet_ink_state.dart';
 import '../input/active_preview_metrics_probe.dart';
@@ -5792,7 +5793,40 @@ class MarkdrawController extends ChangeNotifier {
     double maxLongestSide = 1568,
     void Function(Canvas canvas, double zoom)? afterPaint,
   }) async {
-    if (sceneBounds.width <= 0 || sceneBounds.height <= 0) return null;
+    final image = await _renderRegionImage(
+      sceneBounds,
+      scene: scene ?? _editorState.scene,
+      layout: _layout,
+      background: _canvasBackgroundColor,
+      gridSize: _gridSize,
+      contentBounds: _contentBounds,
+      maxLongestSide: maxLongestSide,
+      afterPaint: afterPaint,
+    );
+    if (image == null) return null;
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      return bytes?.buffer.asUint8List(
+        bytes.offsetInBytes,
+        bytes.lengthInBytes,
+      );
+    } finally {
+      image.dispose();
+    }
+  }
+
+  Future<ui.Image?> _renderRegionImage(
+    Rect sceneBounds, {
+    required Scene scene,
+    required CanvasLayout layout,
+    required String background,
+    required int? gridSize,
+    required Bounds? contentBounds,
+    required double maxLongestSide,
+    bool opaque = false,
+    void Function(Canvas canvas, double zoom)? afterPaint,
+  }) async {
+    if (sceneBounds.isEmpty || !sceneBounds.isFinite) return null;
     final longest = maxLongestSide <= 0 ? 1568.0 : maxLongestSide;
     final sourceWidth = math.max(1.0, sceneBounds.width);
     final sourceHeight = math.max(1.0, sceneBounds.height);
@@ -5805,38 +5839,100 @@ class MarkdrawController extends ChangeNotifier {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
+    if (opaque) canvas.drawColor(Colors.white, BlendMode.src);
     canvas.drawRect(
       Offset.zero & pixelSize,
-      Paint()..color = parseColor(_canvasBackgroundColor),
+      Paint()..color = parseColor(background),
     );
     StaticCanvasPainter(
-      scene: scene ?? _editorState.scene,
+      scene: scene,
       adapter: _adapter,
       viewport: viewport,
-      layout: _layout,
+      layout: layout,
       resolvedImages: _peekResolvedImages(scene: scene),
-      gridSize: _gridSize,
-      isDarkBackground:
-          parseColor(_canvasBackgroundColor).computeLuminance() < 0.5,
-      contentBounds: _contentBounds,
+      gridSize: gridSize,
+      isDarkBackground: parseColor(background).computeLuminance() < 0.5,
+      contentBounds: contentBounds,
       renderPageShadows: false,
     ).paint(canvas, pixelSize);
     // Set-of-Mark 等叠加层：画在场景之上、导出像素坐标空间。
     afterPaint?.call(canvas, zoom);
 
     final picture = recorder.endRecording();
-    ui.Image? image;
     try {
-      image = await picture.toImage(
+      return await picture.toImage(
         pixelSize.width.ceil(),
         pixelSize.height.ceil(),
       );
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
     } finally {
-      image?.dispose();
       picture.dispose();
     }
+  }
+
+  /// Renders the complete note from a single scene snapshot.
+  Future<Uint8List?> exportPdf({
+    void Function(int completed, int total)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final scene = sanitizeSceneForExternalExport(_editorState.scene);
+    final layout = _layout.isPaged ? _layout.ensurePage() : _layout;
+    final background = _canvasBackgroundColor;
+    final gridSize = _gridSize;
+    final contentBounds = _contentBounds;
+    final bounds = layout.isPaged ? null : ExportBounds.compute(scene);
+    final regions = layout.isPaged
+        ? layout.pages.map((page) => page.bounds).toList()
+        : [
+            if (bounds != null)
+              Rect.fromLTWH(
+                bounds.left,
+                bounds.top,
+                bounds.size.width,
+                bounds.size.height,
+              ),
+          ];
+    bool cancelled() => _disposed || (isCancelled?.call() ?? false);
+    final missing = scene.elements
+        .whereType<ImageElement>()
+        .where(
+          (image) => !image.isDeleted && !scene.files.containsKey(image.fileId),
+        )
+        .toList();
+    if (regions.isEmpty || cancelled()) return null;
+    await pdf_export.loadLibrary();
+    return pdf_export.renderNotePdf(
+      pages: regions,
+      paged: layout.isPaged,
+      isCancelled: cancelled,
+      onProgress: onProgress,
+      renderPage: (region) async {
+        final regionBounds = Bounds.fromLTWH(
+          region.left,
+          region.top,
+          region.width,
+          region.height,
+        );
+        if (missing.any(
+          (image) =>
+              AlignmentUtils.visualBounds(image).intersects(regionBounds),
+        )) {
+          throw StateError('有图片未加载');
+        }
+        final failed = await prewarmRegionImages(region, scene: scene);
+        if (cancelled()) return null;
+        if (failed != 0) throw StateError('无法解码页面图片');
+        return _renderRegionImage(
+          region,
+          scene: scene,
+          layout: layout,
+          background: background,
+          gridSize: gridSize,
+          contentBounds: contentBounds,
+          maxLongestSide: 2000,
+          opaque: true,
+        );
+      },
+    );
   }
 
   /// Peek-only image resolution for region export: unlike [resolveImages],

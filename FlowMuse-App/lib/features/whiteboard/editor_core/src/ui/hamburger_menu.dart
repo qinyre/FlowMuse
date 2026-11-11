@@ -87,6 +87,7 @@ class HamburgerMenu extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportPdf;
   final VoidCallback? onExportSmartMarkdown;
   final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
@@ -106,6 +107,7 @@ class HamburgerMenu extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportPdf,
     this.onExportSmartMarkdown,
     this.onExportSmartLatex,
     this.onShare,
@@ -180,6 +182,14 @@ class HamburgerMenu extends StatelessWidget {
       ),
       if (onOpen != null || onSave != null || onSaveAs != null)
         const PopupMenuDivider(),
+      if (onExportPdf != null)
+        _menuItem(
+          context,
+          'export_pdf',
+          Icons.picture_as_pdf_outlined,
+          '导出为 PDF',
+          null,
+        ),
       if (onExportPng != null)
         _menuItem(context, 'export_png', Icons.image, '导出 PNG', '$mod+Shift+E'),
       if (onExportSvg != null)
@@ -203,7 +213,8 @@ class HamburgerMenu extends StatelessWidget {
           enabled: controller.canExportSmartLayout,
         ),
       if (onShare != null) _menuItem(context, 'share', Icons.share, '分享', null),
-      if (onExportPng != null || onExportSvg != null) const PopupMenuDivider(),
+      if (onExportPng != null || onExportSvg != null || onExportPdf != null)
+        const PopupMenuDivider(),
       PopupMenuItem<String>(
         value: 'library',
         child: Row(
@@ -398,6 +409,8 @@ class HamburgerMenu extends StatelessWidget {
           onExportPng?.call();
         case 'export_svg':
           onExportSvg?.call();
+        case 'export_pdf':
+          onExportPdf?.call();
         case 'export_smart_md':
           onExportSmartMarkdown?.call();
         case 'export_smart_tex':

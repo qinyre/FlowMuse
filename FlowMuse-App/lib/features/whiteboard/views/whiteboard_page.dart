@@ -148,6 +148,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   final _roomImageFailures = <String>{};
   final _reportedRoomImageFailures = <String>{};
   bool _preparingRoomImages = false;
+  bool _exportingPdf = false;
   bool _joinedRoomScene = false;
   static const _roomImageConcurrency = 2;
   bool _loadingScene = false;
@@ -2159,12 +2160,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   ),
             );
           }
-            // Upload status changes do not warrant rewriting the local PDF.
-            _markdrawController.applyRemoteElements(
-              updates,
-              notifySceneChange: false,
-            );
-            _previousEditorScene = _markdrawController.currentScene;
+          // Upload status changes do not warrant rewriting the local PDF.
+          _markdrawController.applyRemoteElements(
+            updates,
+            notifySceneChange: false,
+          );
+          _previousEditorScene = _markdrawController.currentScene;
         });
       },
     );
@@ -3014,9 +3015,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
-  Future<bool> _ensureRoomImages() async {
+  Future<bool> _ensureRoomImages({bool allImages = false}) async {
     if (!_canMutateWhiteboard) return false;
-    if (!_joinedRoomScene || !_missingRoomImages().any(_isPdfRoomImage)) {
+    bool hasMissing() => _missingRoomImages().any(
+      (image) => allImages || _isPdfRoomImage(image),
+    );
+    if (!_joinedRoomScene || !hasMissing()) {
       return true;
     }
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
@@ -3052,10 +3056,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         return false;
       }
     }
-    if (!_missingRoomImages().any(_isPdfRoomImage)) return true;
+    if (!hasMissing()) return true;
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('还有 PDF 底图未同步，暂不能生成完整文件，请稍后重试')),
+        SnackBar(
+          content: Text(
+            allImages
+                ? '还有图片未同步，暂不能导出 PDF，请稍后重试'
+                : '还有 PDF 底图未同步，暂不能生成完整文件，请稍后重试',
+          ),
+        ),
       );
     }
     return false;
@@ -3063,6 +3073,93 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _exportWithRoomImages(Future<void> Function() export) async {
     if (await _ensureRoomImages() && _canMutateWhiteboard) await export();
+  }
+
+  Future<void> _exportPdf() async {
+    if (_exportingPdf) return;
+    _exportingPdf = true;
+    final generation = _openGeneration;
+    var cancelled = false;
+    bool isCancelled() =>
+        cancelled || !_canMutateWhiteboard || generation != _openGeneration;
+    void message(String text) {
+      if (!isCancelled()) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(text)));
+      }
+    }
+
+    try {
+      if (!await _ensureRoomImages(allImages: true) || isCancelled()) return;
+      if (!mounted) return;
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final progress = ValueNotifier<(int, int)>((0, 0));
+      final dialog = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('导出为 PDF'),
+          content: ValueListenableBuilder<(int, int)>(
+            valueListenable: progress,
+            builder: (_, value, _) {
+              final (completed, total) = value;
+              final ready = total > 0;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: ready ? completed / total : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    !ready
+                        ? '正在准备页面…'
+                        : completed == total
+                        ? '正在生成文件…'
+                        : '已处理 $completed / $total 页',
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                navigator.pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+      unawaited(navigator.push(dialog));
+      bool shouldStop() => isCancelled() || !dialog.isActive;
+      late final Uint8List? bytes;
+      try {
+        bytes = await _markdrawController.exportPdf(
+          isCancelled: shouldStop,
+          onProgress: (completed, total) => progress.value = (completed, total),
+        );
+        cancelled = shouldStop();
+      } finally {
+        if (navigator.mounted && dialog.isActive) navigator.removeRoute(dialog);
+        progress.dispose();
+      }
+      if (isCancelled()) return;
+      if (bytes == null) {
+        message('当前画布没有可导出的内容');
+      } else if (await _fileHandler.savePdf(bytes)) {
+        message(kIsWeb ? '已开始下载 PDF' : 'PDF 已保存');
+      }
+    } catch (error) {
+      debugPrint('[PdfExport] ${error.runtimeType}');
+      message('PDF 导出失败，请确认图片已加载后重试');
+    } finally {
+      _exportingPdf = false;
+    }
   }
 
   @override
@@ -3240,6 +3337,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     onExportSvg: () {
                       unawaited(_exportWithRoomImages(_fileHandler.exportSvg));
                     },
+                    onExportPdf: () => unawaited(_exportPdf()),
                     onExportSmartMarkdown: () {
                       unawaited(
                         _fileHandler.exportSmartLayout(
