@@ -61,6 +61,13 @@ WHERE room_id = $1`, roomID).Scan(
 	return &snapshot, nil
 }
 
+func (s *SceneStore) Exists(ctx context.Context, roomID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+SELECT EXISTS (SELECT 1 FROM excalidraw_scenes WHERE room_id = $1)`, roomID).Scan(&exists)
+	return exists, err
+}
+
 func (s *SceneStore) Save(ctx context.Context, snapshot SceneSnapshot) error {
 	tag, err := s.db.Exec(ctx, `
 INSERT INTO excalidraw_scenes (room_id, scene_version, scene_hash, encrypted_buffer, iv)

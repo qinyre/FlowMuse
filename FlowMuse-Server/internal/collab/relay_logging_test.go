@@ -20,21 +20,24 @@ func TestForwardLogSamplesBurstAndReportsCumulativeFrames(t *testing.T) {
 	hub := &Hub{now: func() time.Time { return now }}
 	frame := EncryptedFrame{EncryptedBuffer: []byte{1, 2, 3}, IV: []byte{4}}
 	for range 1000 {
-		hub.logForward("socket", "room", frame, false)
+		hub.logForward("socket", "room", frame, false, 1250*time.Microsecond, true)
 	}
 	if lines := strings.Count(output.String(), "\n"); lines != 1 {
 		t.Fatalf("burst produced %d log writes, want one", lines)
 	}
+	if !strings.Contains(output.String(), "relayUs=1250 accepted=true") {
+		t.Fatal("sample omitted the relay duration or result")
+	}
 	for range 100 {
-		hub.logForward("socket", "room", frame, true)
+		hub.logForward("socket", "room", frame, true, 0, false)
 	}
 	now = now.Add(999 * time.Millisecond)
-	hub.logForward("socket", "room", frame, false)
+	hub.logForward("socket", "room", frame, false, 0, false)
 	if lines := strings.Count(output.String(), "\n"); lines != 1 {
 		t.Fatalf("sampling refilled early: %d writes", lines)
 	}
 	now = now.Add(time.Millisecond)
-	hub.logForward("socket", "room", frame, false)
+	hub.logForward("socket", "room", frame, false, 0, false)
 	if strings.Count(output.String(), "\n") != 2 || !strings.Contains(output.String(), "sampled=true totalFrames=1002") {
 		t.Fatal("sample did not refill or count reliable frames across the window")
 	}
@@ -54,7 +57,7 @@ func TestForwardLogConcurrentRoomsShareBoundedSampling(t *testing.T) {
 		go func() {
 			defer group.Done()
 			for range 100 {
-				hub.logForward("socket", roomID, EncryptedFrame{}, false)
+				hub.logForward("socket", roomID, EncryptedFrame{}, false, 0, false)
 			}
 		}()
 	}
@@ -63,7 +66,7 @@ func TestForwardLogConcurrentRoomsShareBoundedSampling(t *testing.T) {
 		t.Fatal("concurrent senders bypassed the instance-wide sampling budget")
 	}
 	now = now.Add(time.Second)
-	hub.logForward("socket", "other-room", EncryptedFrame{}, false)
+	hub.logForward("socket", "other-room", EncryptedFrame{}, false, 0, false)
 	if !strings.Contains(output.String(), "totalFrames=2001") {
 		t.Fatal("concurrent reliable-frame count was lost")
 	}
@@ -90,7 +93,7 @@ func BenchmarkForwardLogging(b *testing.B) {
 			b.ResetTimer()
 			for range b.N {
 				if sampled {
-					hub.logForward("socket", "room", frame, false)
+					hub.logForward("socket", "room", frame, false, 0, false)
 				} else {
 					// Baseline is the deployed c8504b4 per-packet diagnostic.
 					log.Printf("[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false", "socket", "room", len(frame.EncryptedBuffer), len(frame.IV))
