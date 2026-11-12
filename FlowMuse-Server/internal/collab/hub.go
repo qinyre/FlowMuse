@@ -12,7 +12,6 @@ import (
 	"flowmuse/server/internal/auth"
 	"flowmuse/server/internal/storage"
 
-	"github.com/jackc/pgx/v5"
 	parserTypes "github.com/zishang520/engine.io-go-parser/types"
 	"github.com/zishang520/socket.io/v2/socket"
 )
@@ -122,6 +121,7 @@ func (h *Hub) Register() {
 	})
 	h.server.On("connection", func(clients ...any) {
 		client := clients[0].(*socket.Socket)
+		connectedAt := time.Now()
 		h.rememberSocketIdentity(client)
 
 		client.On(EventJoinRoom, func(args ...any) {
@@ -170,8 +170,9 @@ func (h *Hub) Register() {
 			h.userFollow(client, args)
 		})
 
-		client.On("disconnect", func(...any) {
-			h.leaveAll(client)
+		client.On("disconnect", func(args ...any) {
+			reason, _ := firstString(args)
+			h.leaveAll(client, reason, time.Since(connectedAt))
 		})
 		// Announce readiness only after all handlers exist. Authentication can
 		// perform database I/O after Socket.IO's transport-level connect event.
@@ -401,12 +402,21 @@ func (h *Hub) liveInkNow() time.Time {
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	accepted := false
-	defer func() {
-		if !volatile {
-			acknowledgeBroadcast(args, accepted)
-		}
-	}()
+	var startedAt time.Time
+	if !volatile {
+		startedAt = time.Now()
+	}
+	socketID := string(client.Id())
 	roomID, frame, ok := parseBroadcastArgs(args)
+	var relayFinishedAt time.Time
+	if !volatile {
+		defer func() {
+			acknowledgeBroadcast(args, accepted)
+			if !relayFinishedAt.IsZero() {
+				h.logForward(socketID, roomID, frame, false, relayFinishedAt.Sub(startedAt), accepted)
+			}
+		}()
+	}
 	if !ok {
 		log.Printf(
 			"[FlowMuseCollab][server][broadcast_drop] socket=%s reason=parse_broadcast_failed args=%s",
@@ -415,7 +425,6 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		)
 		return
 	}
-	socketID := string(client.Id())
 	h.mu.Lock()
 	currentRoomID := h.socketRooms[socketID]
 	targetInRoom := frame.TargetSocketID == "" || h.socketRooms[frame.TargetSocketID] == roomID
@@ -431,7 +440,6 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
-	h.logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
 	if frame.TargetSocketID != "" {
 		operator = client.To(socket.Room(frame.TargetSocketID))
@@ -440,6 +448,9 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		operator = operator.Volatile()
 	}
 	accepted = operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV) == nil
+	if !volatile {
+		relayFinishedAt = time.Now()
+	}
 }
 
 func acknowledgeBroadcast(args []any, accepted bool) {
@@ -557,12 +568,14 @@ func (h *Hub) userFollow(client *socket.Socket, args []any) {
 	h.server.To(socket.Room(roomID)).Emit(EventUserFollowRoomChange, followedSocketID, followerIDs)
 }
 
-func (h *Hub) leaveAll(client *socket.Socket) {
+func (h *Hub) leaveAll(client *socket.Socket, reason string, connectedFor time.Duration) {
 	socketID := string(client.Id())
 	roomID, users := h.removeSocket(socketID)
 
 	if roomID != "" {
 		h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+		log.Printf("[FlowMuseCollab][server][disconnect] socket=%s reason=%q connectedMs=%d",
+			socketID[:min(8, len(socketID))], reason, connectedFor.Milliseconds())
 	}
 }
 
@@ -588,7 +601,7 @@ func (h *Hub) removeSocket(socketID string) (string, []RoomUser) {
 	return roomID, users
 }
 
-func (h *Hub) logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
+func (h *Hub) logForward(socketID, roomID string, frame EncryptedFrame, volatile bool, relayDuration time.Duration, accepted bool) {
 	if volatile {
 		return
 	}
@@ -602,12 +615,14 @@ func (h *Hub) logForward(socketID, roomID string, frame EncryptedFrame, volatile
 		return
 	}
 	log.Printf(
-		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false sampled=true totalFrames=%d",
-		socketID,
-		roomID,
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false sampled=true totalFrames=%d relayUs=%d accepted=%t",
+		socketID[:min(8, len(socketID))],
+		roomID[:min(8, len(roomID))],
 		len(frame.EncryptedBuffer),
 		len(frame.IV),
 		count,
+		relayDuration.Microseconds(),
+		accepted,
 	)
 }
 
@@ -632,11 +647,9 @@ func (h *Hub) roomExists(roomID string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_, err := h.sceneStore.Load(ctx, roomID)
-	if err == nil {
-		return true
-	}
-	return !errors.Is(err, pgx.ErrNoRows)
+	exists, err := h.sceneStore.Exists(ctx, roomID)
+	// A transient storage error must not be reported as a missing room.
+	return exists || err != nil
 }
 
 func (h *Hub) roomEnded(roomID string) bool {

@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,53 @@ import (
 )
 
 const enginePacketSeparator = "\x1e"
+
+func TestSocketIOLogsActiveRoomDisconnectReason(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	server := socket.NewServer(nil, nil)
+	hub := NewHub(server, nil, nil, nil, nil)
+	hub.roomExistsOverride = func(string) bool { return true }
+	hub.roomEndedOverride = func(string) bool { return false }
+	hub.Register()
+	local := httptest.NewServer(server.ServeHandler(nil))
+	defer local.Close()
+	defer server.Close(nil)
+
+	client, err := newPollingSocketClient(ctx, local.URL, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.emit(ctx, EventJoinRoom, "fixture-room"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.waitEvent(ctx, EventLiveInkReady); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := os.CreateTemp(t.TempDir(), "disconnect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer output.Close()
+	previousWriter := log.Writer()
+	log.SetOutput(output)
+	defer log.SetOutput(previousWriter)
+	if err := client.post(ctx, "41"); err != nil {
+		t.Fatal(err)
+	}
+	for ctx.Err() == nil {
+		data, err := os.ReadFile(output.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), `reason="client namespace disconnect" connectedMs=`) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("active room disconnect reason and duration were not logged")
+}
 
 func TestSocketIOReliableBroadcastAcknowledgesMembership(t *testing.T) {
 	for _, member := range []bool{true, false} {
